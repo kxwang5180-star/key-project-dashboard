@@ -1,8 +1,12 @@
 import { prisma } from "../lib/prisma.js";
+import { getAllowedProjectIdsForUser } from "./project-members.js";
 
-export async function getBootstrapPayload() {
+export async function getBootstrapPayload(user) {
+  const allowedProjectIds = await getAllowedProjectIdsForUser(user);
+  const projectWhere = user?.role === "ADMIN" ? undefined : { id: { in: allowedProjectIds } };
   const [projects, governanceTasks] = await Promise.all([
     prisma.project.findMany({
+      where: projectWhere,
       orderBy: [{ businessLine: "asc" }, { shortName: "asc" }],
       include: {
         milestones: {
@@ -49,9 +53,11 @@ export async function getBootstrapPayload() {
         },
       },
     }),
-    prisma.governanceTask.findMany({
-      orderBy: [{ status: "asc" }, { level: "desc" }, { createdAt: "desc" }],
-    }),
+    user?.role === "ADMIN"
+      ? prisma.governanceTask.findMany({
+          orderBy: [{ status: "asc" }, { level: "desc" }, { createdAt: "desc" }],
+        })
+      : [],
   ]);
 
   return {

@@ -2,14 +2,16 @@ import { Router } from "express";
 import { MilestoneStatus, ProjectStage } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
-import { canUserMaintainProject, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
+import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
 
 export const projectRouter = Router();
 
 projectRouter.use(authenticate);
 
-projectRouter.get("/", async (_req, res) => {
+projectRouter.get("/", async (req, res) => {
+  const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
   const projects = await prisma.project.findMany({
+    where: req.user.role === "ADMIN" ? undefined : { id: { in: allowedProjectIds } },
     orderBy: [{ businessLine: "asc" }, { shortName: "asc" }],
     select: {
       id: true,

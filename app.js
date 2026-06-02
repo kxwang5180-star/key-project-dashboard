@@ -64,6 +64,12 @@ function getViewHash(view) {
   return "";
 }
 
+function getAllowedView(view) {
+  if (!memberProfile) return view === "register" ? "register" : "register";
+  if (!memberProfile.isAdmin) return "report";
+  return view;
+}
+
 function getCurrentReportWeek() {
   const diffDays = Math.floor((TODAY - CYCLE_START) / 86400000) + 1;
   return Math.min(12, Math.max(1, Math.ceil(diffDays / 7)));
@@ -205,9 +211,7 @@ async function loadCurrentUser() {
     memberProfile = normalizeAuthenticatedUser(payload.user);
     const preferredView = getInitialView();
     if (memberProfile) {
-      if (preferredView === "register") state.currentView = memberProfile.isAdmin ? "register" : "dashboard";
-      else if (preferredView === "governance" && !memberProfile.isAdmin) state.currentView = "dashboard";
-      else state.currentView = preferredView;
+      state.currentView = getAllowedView(preferredView);
     }
     if (memberProfile?.projectId) {
       const reportProjectSelect = document.querySelector("#reportProjectSelect");
@@ -916,15 +920,15 @@ function renderToday() {
 }
 
 function renderViewSwitch() {
-  if (!memberProfile && state.currentView !== "register") {
-    state.currentView = "register";
-  }
-  if (memberProfile && !memberProfile.isAdmin && state.currentView === "governance") {
-    state.currentView = "dashboard";
-  }
+  state.currentView = getAllowedView(state.currentView);
   document.body.classList.toggle("auth-page", state.currentView === "register");
-  const governanceButton = document.querySelector('[data-view="governance"]');
-  if (governanceButton) governanceButton.classList.toggle("is-hidden", !memberProfile?.isAdmin);
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    const view = button.dataset.view;
+    const memberOnlyAllowed = memberProfile && !memberProfile.isAdmin && view !== "report";
+    const anonymousBlocked = !memberProfile && view !== "register";
+    const adminOnlyView = view === "governance" && !memberProfile?.isAdmin;
+    button.classList.toggle("is-hidden", Boolean(memberOnlyAllowed || anonymousBlocked || adminOnlyView));
+  });
   document.querySelectorAll(".view-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === state.currentView);
   });
@@ -1688,7 +1692,9 @@ function renderAuthCenter() {
         <span>默认项目：${escapeHtml(projects.find((project) => project.id === memberProfile.projectId)?.shortName || "未设置")}</span>
       </div>
       <div class="auth-actions">
-        <button class="primary-action compact-action" type="button" data-view="dashboard">进入管理看板</button>
+        <button class="primary-action compact-action" type="button" data-view="${memberProfile.isAdmin ? "dashboard" : "report"}">${
+          memberProfile.isAdmin ? "进入管理看板" : "进入项目维护"
+        }</button>
         <button class="secondary-action" type="button" data-logout>退出登录</button>
       </div>
     </div>
@@ -2610,9 +2616,8 @@ document.addEventListener("click", (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
     const nextView = viewButton.dataset.view;
-    state.currentView = !memberProfile && nextView !== "register" ? "register" : nextView;
+    state.currentView = getAllowedView(nextView);
     if (!memberProfile && nextView !== "register") authState.error = "请先通过飞书登录后再进入系统。";
-    if (memberProfile && !memberProfile.isAdmin && nextView === "governance") state.currentView = "dashboard";
     window.location.hash = getViewHash(state.currentView);
     render();
     return;
