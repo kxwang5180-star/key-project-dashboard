@@ -51,11 +51,12 @@ export async function getValidUserAccessToken(userId) {
 
 async function resolveChatMember(member, tenantAccessToken) {
   const memberId = member.member_id || member.user_id || member.open_id || "";
+  const memberIdType = member.open_id || /^ou_/.test(memberId) ? "open_id" : "user_id";
   let contactUser = null;
   if (memberId) {
     try {
       contactUser = await fetchFeishuContactUser(memberId, tenantAccessToken, {
-        userIdType: "user_id",
+        userIdType: memberIdType,
       });
     } catch {
       contactUser = null;
@@ -66,7 +67,8 @@ async function resolveChatMember(member, tenantAccessToken) {
   const matchedUser = await prisma.user.findFirst({
     where: {
       OR: [
-        memberId ? { feishuUserId: memberId } : undefined,
+        memberIdType === "user_id" && memberId ? { feishuUserId: memberId } : undefined,
+        memberIdType === "open_id" && memberId ? { feishuOpenId: memberId } : undefined,
         contactUser?.open_id ? { feishuOpenId: contactUser.open_id } : undefined,
         contactUser?.union_id ? { feishuUnionId: contactUser.union_id } : undefined,
         email ? { email } : undefined,
@@ -78,8 +80,8 @@ async function resolveChatMember(member, tenantAccessToken) {
   return {
     memberId,
     userId: matchedUser?.id || null,
-    feishuUserId: memberId || null,
-    feishuOpenId: contactUser?.open_id || null,
+    feishuUserId: memberIdType === "user_id" ? memberId || null : null,
+    feishuOpenId: contactUser?.open_id || (memberIdType === "open_id" ? memberId || null : null),
     feishuUnionId: contactUser?.union_id || null,
     name: contactUser?.name || member.name || member.member_name || "未命名成员",
     email: email || null,
@@ -89,6 +91,30 @@ async function resolveChatMember(member, tenantAccessToken) {
       user: contactUser,
     },
   };
+}
+
+async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken) {
+  const attempts = [
+    { token: userAccessToken, memberIdType: "user_id", label: "user:user_id" },
+    { token: userAccessToken, memberIdType: "open_id", label: "user:open_id" },
+    { token: tenantAccessToken, memberIdType: "user_id", label: "tenant:user_id" },
+    { token: tenantAccessToken, memberIdType: "open_id", label: "tenant:open_id" },
+  ];
+  const errors = [];
+
+  for (const attempt of attempts) {
+    try {
+      const members = await fetchFeishuChatMembers(chatId, attempt.token, {
+        memberIdType: attempt.memberIdType,
+      });
+      if (members.length) return { members, memberIdType: attempt.memberIdType, source: attempt.label };
+    } catch (error) {
+      errors.push(`${attempt.label}: ${error.message}`);
+    }
+  }
+
+  if (errors.length) throw new Error(errors.join("；"));
+  return { members: [], memberIdType: "user_id", source: "empty" };
 }
 
 export async function syncMyFeishuChatsAndMembers(userId) {
@@ -102,10 +128,11 @@ export async function syncMyFeishuChatsAndMembers(userId) {
     if (!chatId) continue;
 
     let members = [];
+    let memberSource = "";
     try {
-      members = await fetchFeishuChatMembers(chatId, tenantAccessToken, {
-        memberIdType: "user_id",
-      });
+      const result = await fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken);
+      members = result.members;
+      memberSource = result.source;
     } catch (error) {
       errors.push({
         chatId,
@@ -128,6 +155,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           ownerUserId: userId,
           memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
           lastSyncedAt: new Date(),
+          raw: { chat, memberSource },
         },
         create: {
           chatId,
@@ -136,6 +164,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           ownerUserId: userId,
           memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
           lastSyncedAt: new Date(),
+          raw: { chat, memberSource },
         },
       });
 

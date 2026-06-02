@@ -299,6 +299,37 @@ async function syncProjectChatMembers(projectId, chatId) {
   });
 }
 
+async function saveProjectMetrics(project) {
+  const metrics = getProjectMetricItems(project).map((metric) => ({
+    id: metric.id,
+    name: metric.name,
+    currentValue: metric.current,
+    targetValue: metric.target,
+    observation: metric.observation,
+    chartType: metric.chartType,
+  }));
+  return apiRequest(`/api/projects/${project.id}/metrics`, {
+    method: "PUT",
+    body: JSON.stringify({ metrics }),
+  });
+}
+
+async function saveProjectMilestones(project) {
+  const milestones = getReportMilestones(project).map((milestone) => ({
+    id: milestone.id,
+    title: milestone.title,
+    raw: milestone.raw || milestone.title,
+    source: milestone.source || "项目维护",
+    dateKey: milestone.dateInfo?.key || "",
+    status: milestone.status,
+    changeNote: milestone.changeNote || "",
+  }));
+  return apiRequest(`/api/projects/${project.id}/milestones`, {
+    method: "PUT",
+    body: JSON.stringify({ milestones }),
+  });
+}
+
 async function syncMyFeishuChats() {
   return apiRequest("/api/auth/feishu/my-chats/sync", {
     method: "POST",
@@ -1661,9 +1692,19 @@ function renderAuthCenter() {
   const authPanel = document.querySelector("#authPanelContent");
   const roleBindingPanel = document.querySelector("#roleBindingContent");
   const roleBindingWrapper = document.querySelector("#roleBindingPanel");
+  const loginWrapper = document.querySelector("#memberRegisterPanel");
+  const registerHero = document.querySelector(".register-layout .member-hero");
+  const registerLayout = document.querySelector(".register-layout");
   if (!authPanel || !roleBindingPanel || !roleBindingWrapper) return;
+  const hideLoginBox = Boolean(memberProfile);
+  loginWrapper?.classList.toggle("is-hidden", hideLoginBox);
+  registerHero?.classList.toggle("is-hidden", hideLoginBox);
+  registerLayout?.classList.toggle("is-managing-identity", Boolean(memberProfile?.canManageIdentity));
 
   if (authState.loading) {
+    loginWrapper?.classList.remove("is-hidden");
+    registerHero?.classList.remove("is-hidden");
+    registerLayout?.classList.remove("is-managing-identity");
     authPanel.innerHTML = '<div class="empty-state">正在校验飞书登录状态...</div>';
     roleBindingWrapper.classList.add("is-hidden");
     roleBindingPanel.innerHTML = '<div class="empty-state">稍候加载权限信息</div>';
@@ -2900,10 +2941,22 @@ document.addEventListener("click", (event) => {
     const project = getReportProject();
     commitMetricDraft(project);
     state.metricEditMode = false;
-    renderReportProjectMetrics();
-    renderDetail();
-    renderProjectList();
-    renderGovernance();
+    state.saveNotice = "正在保存项目指标...";
+    renderMemberWorkspace();
+    saveProjectMetrics(project)
+      .then(() => {
+        state.saveNotice = "项目指标已保存。";
+      })
+      .catch((error) => {
+        state.saveNotice = error.message;
+      })
+      .finally(() => {
+        renderReportProjectMetrics();
+        renderDetail();
+        renderProjectList();
+        renderGovernance();
+        renderReportStatusPanel();
+      });
     return;
   }
 
@@ -2951,12 +3004,24 @@ document.addEventListener("click", (event) => {
     const project = getReportProject();
     commitMilestoneDraft(project);
     state.milestoneManageMode = false;
-    renderReportMilestoneRail();
-    renderWeekTimeline();
-    renderReportProjectBrief();
-    renderCalendar();
-    renderDetail();
-    renderGovernance();
+    state.saveNotice = "正在保存项目里程碑...";
+    renderMemberWorkspace();
+    saveProjectMilestones(project)
+      .then(() => {
+        state.saveNotice = "项目里程碑已保存。";
+      })
+      .catch((error) => {
+        state.saveNotice = error.message;
+      })
+      .finally(() => {
+        renderReportMilestoneRail();
+        renderWeekTimeline();
+        renderReportProjectBrief();
+        renderCalendar();
+        renderDetail();
+        renderGovernance();
+        renderReportStatusPanel();
+      });
     return;
   }
 
@@ -3140,6 +3205,19 @@ document.addEventListener("input", (event) => {
   if (event.target.id === "chatPickerSearch") {
     state.chatSearch = event.target.value;
     renderChatPickerModal();
+  }
+
+  const milestoneField = event.target.closest("[data-milestone-field]");
+  if (milestoneField) {
+    const project = getReportProject();
+    const milestones = ensureMilestoneDraft(project).map((milestone) => {
+      if (milestone.id !== milestoneField.dataset.milestoneId) return milestone;
+      const next = { ...milestone, [milestoneField.dataset.milestoneField]: milestoneField.value };
+      if (milestoneField.dataset.milestoneField === "title") next.raw = milestoneField.value;
+      return normalizeMilestone(project, next);
+    });
+    draftStore.milestones[project.id] = milestones;
+    return;
   }
 });
 

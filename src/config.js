@@ -47,7 +47,7 @@ export const config = {
       .filter(Boolean),
     allowedEmails: splitEnvList(process.env.FEISHU_ALLOWED_EMAILS).map((item) => item.toLowerCase()),
     adminEmails: splitEnvList(process.env.FEISHU_ADMIN_EMAILS).map((item) => item.toLowerCase()),
-    adminNames: splitEnvList(process.env.FEISHU_ADMIN_NAMES),
+    adminNames: splitEnvList(process.env.FEISHU_ADMIN_NAMES || "王康旭,赵长硕,姚翔宇"),
     identityAdminNames: splitEnvList(process.env.FEISHU_IDENTITY_ADMIN_NAMES || "王康旭"),
     identityAdminEmails: splitEnvList(process.env.FEISHU_IDENTITY_ADMIN_EMAILS).map((item) => item.toLowerCase()),
     adminOpenIds: splitEnvList(process.env.FEISHU_ADMIN_OPEN_IDS),

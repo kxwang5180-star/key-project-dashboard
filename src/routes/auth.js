@@ -155,7 +155,7 @@ authRouter.get("/feishu/callback", async (req, res) => {
     assertFeishuUserAllowed(userInfo);
 
     const email = getUserEmailOrFallback(userInfo);
-    const role = mapRoleFromFeishuUser(userInfo);
+    const mappedRole = mapRoleFromFeishuUser(userInfo);
 
     let user =
       (userInfo.union_id && (await prisma.user.findUnique({ where: { feishuUnionId: userInfo.union_id } }))) ||
@@ -168,7 +168,7 @@ authRouter.get("/feishu/callback", async (req, res) => {
         data: {
           name: String(userInfo.name || user.name).trim(),
           email,
-          role,
+          role: user.role === "ADMIN" ? "ADMIN" : mappedRole,
           feishuOpenId: userInfo.open_id || user.feishuOpenId,
           feishuUnionId: userInfo.union_id || user.feishuUnionId,
           feishuUserId: userInfo.user_id || user.feishuUserId,
@@ -181,7 +181,7 @@ authRouter.get("/feishu/callback", async (req, res) => {
         data: {
           name: String(userInfo.name || "飞书用户").trim(),
           email,
-          role,
+          role: mappedRole,
           feishuOpenId: userInfo.open_id || null,
           feishuUnionId: userInfo.union_id || null,
           feishuUserId: userInfo.user_id || null,

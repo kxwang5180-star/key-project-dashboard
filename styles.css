@@ -1732,6 +1732,14 @@ h3 {
   align-items: stretch;
 }
 
+.register-layout.is-managing-identity {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.register-layout.is-managing-identity #roleBindingPanel {
+  max-width: none;
+}
+
 .report-workbench {
   grid-template-columns: minmax(240px, 0.34fr) minmax(780px, 1.45fr);
 }
