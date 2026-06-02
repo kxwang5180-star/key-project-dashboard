@@ -28,6 +28,9 @@ const state = {
   chatPickerOpen: false,
   chatPickerProjectId: "",
   chatSearch: "",
+  expandedProjectGroups: {},
+  userEditModalOpen: false,
+  userEditTargetId: null,
 };
 
 const sourceRows = Array.isArray(window.PROJECT_SOURCE) ? window.PROJECT_SOURCE : [];
@@ -41,6 +44,9 @@ const authState = {
   chatSyncErrors: [],
   users: [],
   chats: [],
+  chatSyncing: false,
+  usersRefreshing: false,
+  chatsRefreshing: false,
 };
 const draftStore = {
   briefs: {},
@@ -208,7 +214,23 @@ async function apiRequest(url, options = {}) {
     },
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+  const contentType = response.headers.get("content-type") || "";
+  if (text && contentType.includes("application/json")) {
+    payload = JSON.parse(text);
+  } else if (text && text.trim().startsWith("{")) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  } else if (text) {
+    payload = {
+      message: response.ok
+        ? "接口返回格式异常"
+        : `接口返回了 HTML 页面，可能是部署入口或 API 路径错误（HTTP ${response.status}）`,
+    };
+  }
   if (!response.ok) {
     const error = new Error(payload?.message || "请求失败");
     error.status = response.status;
@@ -1763,10 +1785,42 @@ function renderAuthCenter() {
   }
 
   roleBindingWrapper.classList.remove("is-hidden");
+
+  // Group users by projectId
+  const projectUsers = {};
+  const unassignedUsers = [];
+  for (const user of authState.users) {
+    if (user.projectId && projects.some((p) => p.id === user.projectId)) {
+      if (!projectUsers[user.projectId]) projectUsers[user.projectId] = [];
+      projectUsers[user.projectId].push(user);
+    } else {
+      unassignedUsers.push(user);
+    }
+  }
+
+  const groupEntries = [
+    ...projects
+      .filter((p) => projectUsers[p.id]?.length)
+      .map((p) => ({ project: p, users: projectUsers[p.id] })),
+    ...(unassignedUsers.length
+      ? [{ project: { id: "__unassigned", shortName: "未分配项目", businessLine: "暂未指定默认项目", color: "#6b7280" }, users: unassignedUsers }]
+      : []),
+  ];
+
+  const renderProjectOptions = (selectedId) =>
+    `<option value="" ${!selectedId ? "selected" : ""}>不指定默认项目</option>` +
+    projects
+      .map(
+        (p) => `<option value="${p.id}" ${selectedId === p.id ? "selected" : ""}>${escapeHtml(p.shortName)}</option>`
+      )
+      .join("");
+
+  const refreshLabel = authState.usersRefreshing ? "刷新中..." : "刷新";
+
   roleBindingPanel.innerHTML = `
     <div class="role-binding-head">
       <strong>${authState.users.length} 位已登录用户</strong>
-      <button class="tiny-action" type="button" data-refresh-users>刷新</button>
+      <button class="tiny-action" type="button" data-refresh-users ${authState.usersRefreshing ? "disabled" : ""}>${refreshLabel}</button>
     </div>
     ${authState.bindingError ? `<div class="save-notice">${escapeHtml(authState.bindingError)}</div>` : ""}
     ${
@@ -1777,46 +1831,46 @@ function renderAuthCenter() {
             .join("")}</div>`
         : ""
     }
-    <div class="role-binding-list">
-      ${authState.users
+    <div class="project-group-list">
+      ${groupEntries
         .map(
-          (user) => `
-            <article class="binding-row" data-user-row="${user.id}">
-              <div class="binding-user">
-                <span class="identity-avatar is-small">${escapeHtml(getDisplayInitials(user.name))}</span>
-                <div>
-                  <strong>${escapeHtml(user.name)}</strong>
-                  <span>${escapeHtml(getUserContactLabel(user))}</span>
+          ({ project, users }) => {
+            const isExpanded = state.expandedProjectGroups[project.id] === true;
+            const arrow = isExpanded ? "▾" : "▸";
+            return `
+              <article class="project-group-card ${isExpanded ? "is-expanded" : ""}" data-project-group="${project.id}">
+                <button class="project-group-head" type="button" data-toggle-project-group="${project.id}">
+                  <span class="project-group-avatar" style="--project-color: ${escapeHtml(project.color || "#6b7280")}">${escapeHtml(project.shortName.slice(0, 1))}</span>
+                  <div class="project-group-meta">
+                    <strong>${escapeHtml(project.shortName)}</strong>
+                    <span>${users.length} 人 · ${escapeHtml(project.businessLine || "")}</span>
+                  </div>
+                  <span class="project-group-arrow">${arrow}</span>
+                </button>
+                <div class="project-group-body ${isExpanded ? "" : "is-collapsed"}">
+                  <div class="avatar-strip">
+                    ${users
+                      .map(
+                        (user) => `
+                          <button class="avatar-chip" type="button" data-open-user-edit="${user.id}" title="${escapeHtml(user.name)} · ${escapeHtml(getUserContactLabel(user))}">
+                            <span class="identity-avatar is-small">${escapeHtml(getDisplayInitials(user.name))}</span>
+                            <span class="avatar-chip-label">${escapeHtml(user.name)}</span>
+                          </button>
+                        `
+                      )
+                      .join("")}
+                  </div>
                 </div>
-              </div>
-              <label>
-                <span>系统角色</span>
-                <select data-binding-role="${user.id}">
-                  <option value="MEMBER" ${user.roleKey === "MEMBER" ? "selected" : ""}>项目成员</option>
-                  <option value="ADMIN" ${user.roleKey === "ADMIN" ? "selected" : ""}>管理员</option>
-                </select>
-              </label>
-              <label>
-                <span>默认项目</span>
-                <select data-binding-project="${user.id}">
-                  <option value="" ${!user.projectId ? "selected" : ""}>不指定默认项目</option>
-                  ${projects
-                    .map(
-                      (project) =>
-                        `<option value="${project.id}" ${user.projectId === project.id ? "selected" : ""}>${escapeHtml(project.shortName)}</option>`
-                    )
-                    .join("")}
-                </select>
-              </label>
-              <button class="secondary-action compact-action" type="button" data-save-user-binding="${user.id}">保存绑定</button>
-            </article>
-          `
+              </article>
+            `;
+          }
         )
         .join("")}
+      ${!groupEntries.length ? '<div class="empty-state">暂无已登录用户</div>' : ""}
     </div>
     <div class="role-binding-head project-chat-head">
       <strong>项目群聊绑定</strong>
-      <button class="tiny-action" type="button" data-sync-my-feishu-chats>同步我的飞书群聊</button>
+      <button class="tiny-action" type="button" data-sync-my-feishu-chats ${authState.chatSyncing ? "disabled" : ""}>${authState.chatSyncing ? "同步中..." : "同步我的飞书群聊"}</button>
       <span>先同步你账号加入的群聊和成员，再将项目绑定到对应群聊。</span>
     </div>
     <div class="role-binding-list">
@@ -1867,7 +1921,7 @@ function renderChatPickerModal() {
       <h3 id="chatPickerTitle">${escapeHtml(project?.shortName || "选择项目群聊")}</h3>
       <div class="chat-picker-tools">
         <input id="chatPickerSearch" value="${escapeHtml(state.chatSearch)}" placeholder="搜索群聊名称、chat_id 或成员姓名" />
-        <button class="secondary-action compact-action" type="button" data-refresh-chat-list>刷新列表</button>
+        <button class="secondary-action compact-action" type="button" data-refresh-chat-list ${authState.chatsRefreshing ? "disabled" : ""}>${authState.chatsRefreshing ? "刷新中..." : "刷新列表"}</button>
       </div>
       <div class="chat-picker-list">
         ${
@@ -1888,6 +1942,53 @@ function renderChatPickerModal() {
                 .join("")
             : '<div class="empty-state">暂无可选群聊。请先点击“同步我的飞书群聊”。</div>'
         }
+      </div>
+    </section>
+  `;
+}
+
+function renderUserEditModal() {
+  const modal = document.querySelector("#userEditModal");
+  if (!modal) return;
+  const user = authState.users.find((u) => u.id === state.userEditTargetId);
+  modal.classList.toggle("is-open", state.userEditModalOpen && Boolean(user));
+  modal.setAttribute("aria-hidden", state.userEditModalOpen && user ? "false" : "true");
+  if (!user) {
+    modal.innerHTML = "";
+    return;
+  }
+  const projectOptions = `<option value="">不指定默认项目</option>` +
+    projects.map((p) => `<option value="${p.id}" ${user.projectId === p.id ? "selected" : ""}>${escapeHtml(p.shortName)}</option>`).join("");
+
+  modal.innerHTML = `
+    <section class="modal-card user-edit-card" role="dialog" aria-modal="true" aria-labelledby="userEditTitle">
+      <button class="modal-close" type="button" data-close-user-edit aria-label="关闭">×</button>
+      <p class="modal-eyebrow">人员角色与项目绑定</p>
+      <div class="user-edit-header">
+        <span class="identity-avatar">${escapeHtml(getDisplayInitials(user.name))}</span>
+        <div>
+          <h3 id="userEditTitle">${escapeHtml(user.name)}</h3>
+          <span>${escapeHtml(getUserContactLabel(user))}</span>
+        </div>
+      </div>
+      <div class="user-edit-fields">
+        <label>
+          <span>系统角色</span>
+          <select data-edit-user-role="${user.id}">
+            <option value="MEMBER" ${user.roleKey === "MEMBER" ? "selected" : ""}>项目成员</option>
+            <option value="ADMIN" ${user.roleKey === "ADMIN" ? "selected" : ""}>管理员</option>
+          </select>
+        </label>
+        <label>
+          <span>默认项目</span>
+          <select data-edit-user-project="${user.id}">
+            ${projectOptions}
+          </select>
+        </label>
+      </div>
+      <div class="user-edit-actions">
+        <button class="secondary-action" type="button" data-close-user-edit>取消</button>
+        <button class="primary-action" type="button" data-save-user-edit="${user.id}">保存绑定</button>
       </div>
     </section>
   `;
@@ -2658,6 +2759,7 @@ function render() {
   renderProjectSelects();
   renderAuthCenter();
   renderChatPickerModal();
+  renderUserEditModal();
   renderMemberWorkspace();
   renderGovernance();
 }
@@ -2711,32 +2813,60 @@ document.addEventListener("click", (event) => {
 
   const refreshUsersButton = event.target.closest("[data-refresh-users]");
   if (refreshUsersButton) {
+    authState.usersRefreshing = true;
+    renderAuthCenter();
     loadRoleBindings()
       .then(() => {
         authState.bindingError = "";
+        authState.usersRefreshing = false;
         renderAuthCenter();
       })
       .catch((error) => {
         authState.bindingError = error.message;
+        authState.usersRefreshing = false;
         renderAuthCenter();
       });
     return;
   }
 
-  const saveUserBindingButton = event.target.closest("[data-save-user-binding]");
-  if (saveUserBindingButton) {
-    const userId = saveUserBindingButton.dataset.saveUserBinding;
-    const role = document.querySelector(`[data-binding-role="${userId}"]`)?.value || "MEMBER";
-    const defaultProjectId = document.querySelector(`[data-binding-project="${userId}"]`)?.value || "";
+  const toggleProjectGroupButton = event.target.closest("[data-toggle-project-group]");
+  if (toggleProjectGroupButton) {
+    const groupId = toggleProjectGroupButton.dataset.toggleProjectGroup;
+    state.expandedProjectGroups[groupId] = state.expandedProjectGroups[groupId] === false ? true : state.expandedProjectGroups[groupId] === true ? false : false;
+    renderAuthCenter();
+    return;
+  }
+
+  const openUserEditButton = event.target.closest("[data-open-user-edit]");
+  if (openUserEditButton) {
+    state.userEditTargetId = openUserEditButton.dataset.openUserEdit;
+    state.userEditModalOpen = true;
+    renderUserEditModal();
+    return;
+  }
+
+  if (event.target.closest("[data-close-user-edit]") || event.target.id === "userEditModal") {
+    state.userEditModalOpen = false;
+    state.userEditTargetId = null;
+    renderUserEditModal();
+    return;
+  }
+
+  const saveUserEditButton = event.target.closest("[data-save-user-edit]");
+  if (saveUserEditButton) {
+    const userId = saveUserEditButton.dataset.saveUserEdit;
+    const role = document.querySelector(`[data-edit-user-role="${userId}"]`)?.value || "MEMBER";
+    const defaultProjectId = document.querySelector(`[data-edit-user-project="${userId}"]`)?.value || "";
     saveRoleBinding(userId, role, defaultProjectId)
       .then(() => {
         authState.bindingError = "";
-        renderAuthCenter();
-        renderMemberWorkspace();
+        state.userEditModalOpen = false;
+        state.userEditTargetId = null;
+        render();
       })
       .catch((error) => {
         authState.bindingError = error.message;
-        renderAuthCenter();
+        render();
       });
     return;
   }
@@ -2784,11 +2914,16 @@ document.addEventListener("click", (event) => {
 
   const refreshChatListButton = event.target.closest("[data-refresh-chat-list]");
   if (refreshChatListButton) {
+    authState.chatsRefreshing = true;
+    renderChatPickerModal();
     loadFeishuChats()
       .catch((error) => {
         authState.bindingError = error.message;
       })
-      .finally(() => render());
+      .finally(() => {
+        authState.chatsRefreshing = false;
+        render();
+      });
     return;
   }
 
@@ -2815,6 +2950,8 @@ document.addEventListener("click", (event) => {
   const syncMyFeishuChatsButton = event.target.closest("[data-sync-my-feishu-chats]");
   if (syncMyFeishuChatsButton) {
     authState.chatSyncErrors = [];
+    authState.chatSyncing = true;
+    renderAuthCenter();
     syncMyFeishuChats()
       .then((payload) => {
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
@@ -2822,11 +2959,14 @@ document.addEventListener("click", (event) => {
         authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
         return loadFeishuChats();
       })
+      .then(() => loadRoleBindings())
       .then(() => {
+        authState.chatSyncing = false;
         renderAuthCenter();
       })
       .catch((error) => {
         authState.bindingError = error.message;
+        authState.chatSyncing = false;
         renderAuthCenter();
       });
     return;
@@ -2841,8 +2981,9 @@ document.addEventListener("click", (event) => {
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
         authState.bindingError = `已同步 ${payload.members?.length || 0} 位群成员。`;
-        renderAuthCenter();
+        return loadRoleBindings();
       })
+      .then(() => renderAuthCenter())
       .catch((error) => {
         authState.bindingError = error.message;
         renderAuthCenter();

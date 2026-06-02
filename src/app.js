@@ -35,6 +35,12 @@ export function createApp() {
   app.use("/api/reports", reportRouter);
   app.use("/api/governance", governanceRouter);
 
+  app.use("/api", (req, res) => {
+    res.status(404).json({
+      message: `API 不存在：${req.originalUrl}`,
+    });
+  });
+
   app.use(express.static(rootDir));
 
   app.get("*", (_req, res) => {
