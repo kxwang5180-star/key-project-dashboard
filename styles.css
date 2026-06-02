@@ -112,6 +112,16 @@ h3 {
   min-width: 0;
 }
 
+.auth-page .view-switch,
+.auth-page .profile-entry,
+.auth-page .date-chip {
+  display: none;
+}
+
+.auth-page .topbar {
+  align-items: flex-start;
+}
+
 .view-switch {
   display: flex;
   gap: 5px;
@@ -1717,6 +1727,11 @@ h3 {
   grid-template-columns: minmax(300px, 0.74fr) minmax(420px, 1fr);
 }
 
+.register-layout {
+  grid-template-columns: minmax(320px, 0.55fr) minmax(420px, 0.82fr);
+  align-items: stretch;
+}
+
 .report-workbench {
   grid-template-columns: minmax(240px, 0.34fr) minmax(780px, 1.45fr);
 }
@@ -1732,18 +1747,16 @@ h3 {
   position: sticky;
   top: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background:
-    linear-gradient(145deg, rgba(37, 99, 235, 0.12), rgba(15, 159, 110, 0.08)),
-    rgba(255, 255, 255, 0.74);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
   box-shadow: var(--shadow-soft);
-  padding: clamp(22px, 4vw, 34px);
+  padding: clamp(22px, 3vw, 30px);
 }
 
 .member-hero h2 {
-  margin-bottom: 12px;
-  font-size: clamp(26px, 3vw, 38px);
-  line-height: 1.12;
+  margin-bottom: 10px;
+  font-size: clamp(24px, 2.5vw, 34px);
+  line-height: 1.15;
 }
 
 .member-hero p:last-child {
@@ -1768,14 +1781,32 @@ h3 {
 }
 
 .auth-card {
-  min-height: 220px;
+  min-height: 244px;
+}
+
+.login-entry {
+  min-height: 172px;
+  align-content: center;
+}
+
+.login-status-dot {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 820;
 }
 
 .auth-copy strong,
 .role-binding-head strong,
 .identity-copy strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 820;
 }
 
@@ -1795,7 +1826,8 @@ h3 {
 }
 
 .feishu-login-button {
-  min-width: 160px;
+  min-width: 176px;
+  padding: 0 22px;
 }
 
 .identity-card,

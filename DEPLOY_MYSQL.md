@@ -193,6 +193,14 @@ docker run -d \
 https://your-domain.com/api/auth/feishu/callback
 ```
 
+当前测试服务器如果暂时没有域名，可先配置为：
+
+```text
+http://172.20.185.141/api/auth/feishu/callback
+```
+
+该地址必须和服务器 `.env` 中的 `FEISHU_REDIRECT_URI` 完全一致。飞书错误码 `20029` 通常就是授权请求里的 `redirect_uri` 没有在开放平台重定向 URL 列表中配置，或协议、地址、端口、路径存在任一差异。
+
 4. 在权限管理中申请至少这些权限：
    - `contact:user.base:readonly`
    - `auth:user.id:read`

@@ -870,6 +870,7 @@ function renderViewSwitch() {
   if (memberProfile && !memberProfile.isAdmin && state.currentView === "governance") {
     state.currentView = "dashboard";
   }
+  document.body.classList.toggle("auth-page", state.currentView === "register");
   const governanceButton = document.querySelector('[data-view="governance"]');
   if (governanceButton) governanceButton.classList.toggle("is-hidden", !memberProfile?.isAdmin);
   document.querySelectorAll(".view-button").forEach((button) => {
@@ -1587,26 +1588,27 @@ function renderAuthCenter() {
 
   if (authState.loading) {
     authPanel.innerHTML = '<div class="empty-state">正在校验飞书登录状态...</div>';
-    roleBindingWrapper.classList.add("is-disabled");
+    roleBindingWrapper.classList.add("is-hidden");
     roleBindingPanel.innerHTML = '<div class="empty-state">稍候加载权限信息</div>';
     return;
   }
 
   if (!memberProfile) {
     authPanel.innerHTML = `
-      <div class="auth-stack">
+      <div class="auth-stack login-entry">
+        <span class="login-status-dot">未登录</span>
         <div class="auth-copy">
-          <strong>未登录</strong>
-          <p>使用企业飞书账号完成身份验证后，系统会自动识别你的角色并带入默认项目。</p>
+          <strong>使用飞书登录</strong>
+          <p>完成企业身份验证后进入系统。</p>
         </div>
         <div class="auth-actions">
-          <button class="primary-action feishu-login-button" type="button" data-feishu-login>飞书登录</button>
+          <button class="primary-action feishu-login-button" type="button" data-feishu-login>使用飞书登录</button>
         </div>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;
-    roleBindingWrapper.classList.add("is-disabled");
-    roleBindingPanel.innerHTML = '<div class="empty-state">登录后可查看当前账号权限；管理员登录后可维护人员角色绑定。</div>';
+    roleBindingWrapper.classList.add("is-hidden");
+    roleBindingPanel.innerHTML = "";
     return;
   }
 
@@ -1627,18 +1629,19 @@ function renderAuthCenter() {
         <span>默认项目：${escapeHtml(projects.find((project) => project.id === memberProfile.projectId)?.shortName || "未设置")}</span>
       </div>
       <div class="auth-actions">
+        <button class="primary-action compact-action" type="button" data-view="dashboard">进入管理看板</button>
         <button class="secondary-action" type="button" data-logout>退出登录</button>
       </div>
     </div>
   `;
 
   if (!memberProfile.isAdmin) {
-    roleBindingWrapper.classList.add("is-disabled");
-    roleBindingPanel.innerHTML = '<div class="empty-state">当前账号为项目成员。管理员登录后，这里可维护人员角色与默认项目。</div>';
+    roleBindingWrapper.classList.add("is-hidden");
+    roleBindingPanel.innerHTML = "";
     return;
   }
 
-  roleBindingWrapper.classList.remove("is-disabled");
+  roleBindingWrapper.classList.remove("is-hidden");
   roleBindingPanel.innerHTML = `
     <div class="role-binding-head">
       <strong>${authState.users.length} 位已登录用户</strong>
