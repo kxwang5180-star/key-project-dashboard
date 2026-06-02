@@ -253,7 +253,7 @@ authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), as
       scopes: config.feishu.scopes,
     });
     res.status(502).json({
-      message: `飞书群聊同步失败：${error.message}。请确认 FEISHU_SCOPES 包含 im:chat:read 和 im:chat.members:read，并重新飞书登录授权。`,
+      message: `飞书群聊同步失败：${error.message}。请确认应用已开启机器人能力，FEISHU_SCOPES 包含 im:chat:read 和 im:chat.members:read，并重新飞书登录授权。`,
     });
   }
 });

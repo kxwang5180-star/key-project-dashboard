@@ -38,6 +38,7 @@ const authState = {
   loading: true,
   error: "",
   bindingError: "",
+  chatSyncErrors: [],
   users: [],
   chats: [],
 };
@@ -1768,6 +1769,14 @@ function renderAuthCenter() {
       <button class="tiny-action" type="button" data-refresh-users>刷新</button>
     </div>
     ${authState.bindingError ? `<div class="save-notice">${escapeHtml(authState.bindingError)}</div>` : ""}
+    ${
+      authState.chatSyncErrors.length
+        ? `<div class="sync-error-list">${authState.chatSyncErrors
+            .slice(0, 5)
+            .map((item) => `<p><strong>${escapeHtml(item.name || item.chatId)}</strong>${escapeHtml(item.message || "成员读取失败")}</p>`)
+            .join("")}</div>`
+        : ""
+    }
     <div class="role-binding-list">
       ${authState.users
         .map(
@@ -2805,10 +2814,12 @@ document.addEventListener("click", (event) => {
 
   const syncMyFeishuChatsButton = event.target.closest("[data-sync-my-feishu-chats]");
   if (syncMyFeishuChatsButton) {
+    authState.chatSyncErrors = [];
     syncMyFeishuChats()
       .then((payload) => {
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
         authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录${errorTip}。`;
+        authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
         return loadFeishuChats();
       })
       .then(() => {
@@ -3046,6 +3057,48 @@ document.addEventListener("click", (event) => {
     state.milestoneEditMode = !state.milestoneEditMode;
     renderWeekTimeline();
     renderReportStatusPanel();
+    return;
+  }
+
+  const saveFocusedMilestone = event.target.closest("[data-save-focused-milestone]");
+  if (saveFocusedMilestone) {
+    const form = document.querySelector("#memberReportForm");
+    const project = getReportProject();
+    const milestone = getReportMilestone(project);
+    if (!form || !project || !milestone) return;
+    const nextTitle = String(form.elements.milestoneTitle.value || milestone.title).trim();
+    const nextDate = String(form.elements.milestoneDate.value || milestone.dateInfo?.key || "").trim();
+    const nextStatus = editableMilestoneStatusMap[form.elements.milestoneStatus.value] ? form.elements.milestoneStatus.value : "planned";
+    const milestones = getReportMilestones(project).map((item) => {
+      if (item.id !== milestone.id) return item;
+      return normalizeMilestone(project, {
+        ...serializeMilestone(item),
+        title: nextTitle,
+        raw: nextTitle,
+        dateKey: nextDate,
+        status: nextStatus,
+      });
+    });
+    setProjectMilestones(project, milestones);
+    state.milestoneEditMode = false;
+    state.saveNotice = "正在保存项目里程碑...";
+    renderMemberWorkspace();
+    saveProjectMilestones(project)
+      .then(() => {
+        state.saveNotice = "项目里程碑已保存。";
+      })
+      .catch((error) => {
+        state.saveNotice = error.message;
+      })
+      .finally(() => {
+        syncReportMilestoneFields();
+        renderReportMilestoneRail();
+        renderWeekTimeline();
+        renderReportProjectBrief();
+        renderCalendar();
+        renderDetail();
+        renderReportStatusPanel();
+      });
     return;
   }
 

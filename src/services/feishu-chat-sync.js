@@ -95,10 +95,10 @@ async function resolveChatMember(member, tenantAccessToken) {
 
 async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken) {
   const attempts = [
-    { token: userAccessToken, memberIdType: "user_id", label: "user:user_id" },
     { token: userAccessToken, memberIdType: "open_id", label: "user:open_id" },
-    { token: tenantAccessToken, memberIdType: "user_id", label: "tenant:user_id" },
+    { token: userAccessToken, memberIdType: "user_id", label: "user:user_id" },
     { token: tenantAccessToken, memberIdType: "open_id", label: "tenant:open_id" },
+    { token: tenantAccessToken, memberIdType: "user_id", label: "tenant:user_id" },
   ];
   const errors = [];
 

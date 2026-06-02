@@ -1734,10 +1734,13 @@ h3 {
 
 .register-layout.is-managing-identity {
   grid-template-columns: minmax(0, 1fr);
+  width: 100%;
 }
 
 .register-layout.is-managing-identity #roleBindingPanel {
+  width: 100%;
   max-width: none;
+  justify-self: stretch;
 }
 
 .report-workbench {
@@ -1752,8 +1755,7 @@ h3 {
 }
 
 .member-hero {
-  position: sticky;
-  top: 16px;
+  position: static;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.72);
@@ -1786,6 +1788,8 @@ h3 {
 .role-binding-list {
   display: grid;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .auth-card {
@@ -1939,12 +1943,15 @@ h3 {
 }
 
 .binding-row {
-  grid-template-columns: minmax(240px, 1.2fr) minmax(132px, 0.55fr) minmax(180px, 0.85fr) auto;
-  align-items: end;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .binding-row.project-chat-row {
-  grid-template-columns: minmax(240px, 0.9fr) minmax(260px, 1.1fr) auto;
+  grid-template-columns: 1fr;
 }
 
 @media (max-width: 1180px) {
@@ -1953,10 +1960,32 @@ h3 {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+}
 
-  .binding-actions {
-    justify-content: flex-start;
-  }
+.binding-actions {
+  justify-content: flex-start;
+}
+
+.sync-error-list {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(180, 35, 35, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 247, 247, 0.8);
+  padding: 10px 12px;
+}
+
+.sync-error-list p {
+  margin: 0;
+  color: #8f1d1d;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.sync-error-list strong {
+  display: block;
+  color: #5f1717;
 }
 
 .binding-user strong,
@@ -2480,6 +2509,7 @@ h3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .milestone-focus > strong {
@@ -2489,9 +2519,26 @@ h3 {
 }
 
 .milestone-focus-head strong {
+  min-width: 0;
   color: var(--ink);
   font-size: 16px;
   line-height: 1.45;
+}
+
+.milestone-focus-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.milestone-focus-actions [data-save-focused-milestone] {
+  display: none;
+}
+
+.milestone-focus.is-editing .milestone-focus-actions [data-save-focused-milestone] {
+  display: inline-flex;
 }
 
 .tiny-action {
