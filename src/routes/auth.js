@@ -12,10 +12,12 @@ import {
   getUserEmailOrFallback,
   mapRoleFromFeishuUser,
 } from "../lib/feishu.js";
+import { ensureUserProjectMembershipLinks, getAllowedProjectIdsForUser } from "../services/project-members.js";
+import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/feishu-chat-sync.js";
 
 export const authRouter = Router();
 
-function toPublicUser(user) {
+function toPublicUser(user, allowedProjectIds = []) {
   return {
     id: user.id,
     name: user.name,
@@ -24,6 +26,7 @@ function toPublicUser(user) {
     roleKey: user.role,
     defaultProjectId: user.defaultProjectId,
     projectId: user.defaultProjectId,
+    projectIds: allowedProjectIds,
     avatarUrl: user.avatarUrl || null,
     feishuLinked: Boolean(user.feishuOpenId || user.feishuUnionId),
   };
@@ -145,6 +148,7 @@ authRouter.get("/feishu/callback", async (req, res) => {
           feishuUnionId: userInfo.union_id || user.feishuUnionId,
           feishuUserId: userInfo.user_id || user.feishuUserId,
           avatarUrl: userInfo.avatar_url || user.avatarUrl,
+          ...buildFeishuTokenData(tokenData),
         },
       });
     } else {
@@ -157,6 +161,7 @@ authRouter.get("/feishu/callback", async (req, res) => {
           feishuUnionId: userInfo.union_id || null,
           feishuUserId: userInfo.user_id || null,
           avatarUrl: userInfo.avatar_url || null,
+          ...buildFeishuTokenData(tokenData),
         },
       });
     }
@@ -170,7 +175,9 @@ authRouter.get("/feishu/callback", async (req, res) => {
 });
 
 authRouter.get("/me", authenticate, async (req, res) => {
-  res.json({ user: toPublicUser(req.user) });
+  await ensureUserProjectMembershipLinks(req.user);
+  const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
+  res.json({ user: toPublicUser(req.user, allowedProjectIds) });
 });
 
 authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (_req, res) => {
@@ -191,6 +198,43 @@ authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (_req, res) 
   });
   res.json({
     users: users.map((user) => toPublicUser(user)),
+  });
+});
+
+authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), async (req, res) => {
+  const result = await syncMyFeishuChatsAndMembers(req.user.id);
+  res.json({
+    ok: true,
+    ...result,
+  });
+});
+
+authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (_req, res) => {
+  const chats = await prisma.feishuChat.findMany({
+    orderBy: [{ lastSyncedAt: "desc" }, { name: "asc" }],
+    include: {
+      members: {
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          memberId: true,
+          name: true,
+          email: true,
+          userId: true,
+        },
+      },
+    },
+  });
+
+  res.json({
+    chats: chats.map((chat) => ({
+      chatId: chat.chatId,
+      name: chat.name,
+      description: chat.description,
+      memberCount: chat.memberCount,
+      lastSyncedAt: chat.lastSyncedAt,
+      members: chat.members,
+    })),
   });
 });
 

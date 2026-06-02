@@ -24,6 +24,16 @@ export async function getBootstrapPayload() {
           },
           orderBy: [{ level: "desc" }, { createdAt: "desc" }],
         },
+        members: {
+          orderBy: [{ name: "asc" }],
+          select: {
+            id: true,
+            userId: true,
+            memberId: true,
+            name: true,
+            email: true,
+          },
+        },
         reports: {
           orderBy: [{ weekNumber: "desc" }, { createdAt: "desc" }],
           take: 20,

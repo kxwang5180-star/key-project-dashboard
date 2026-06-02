@@ -25,6 +25,9 @@ const state = {
   saveNotice: "",
   governanceLevel: "all",
   governanceType: "all",
+  chatPickerOpen: false,
+  chatPickerProjectId: "",
+  chatSearch: "",
 };
 
 const sourceRows = Array.isArray(window.PROJECT_SOURCE) ? window.PROJECT_SOURCE : [];
@@ -36,6 +39,7 @@ const authState = {
   error: "",
   bindingError: "",
   users: [],
+  chats: [],
 };
 const draftStore = {
   briefs: {},
@@ -159,13 +163,15 @@ function getRoleLabel(role) {
 
 function normalizeAuthenticatedUser(user) {
   if (!user) return null;
+  const projectIds = Array.isArray(user.projectIds) ? user.projectIds : [];
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: getRoleLabel(user.role),
     roleKey: user.role === "ADMIN" ? "ADMIN" : "MEMBER",
-    projectId: user.defaultProjectId || projects[0]?.id || "",
+    projectIds,
+    projectId: user.defaultProjectId || projectIds[0] || projects[0]?.id || "",
     avatarUrl: user.avatarUrl || "",
     feishuLinked: Boolean(user.feishuLinked),
     isAdmin: user.role === "ADMIN",
@@ -207,6 +213,9 @@ async function loadCurrentUser() {
       const reportProjectSelect = document.querySelector("#reportProjectSelect");
       if (reportProjectSelect) reportProjectSelect.value = memberProfile.projectId;
     }
+    if (memberProfile) {
+      await loadProjectChatBindings();
+    }
     if (memberProfile?.isAdmin) {
       await loadRoleBindings();
     } else {
@@ -234,6 +243,17 @@ async function loadRoleBindings() {
   authState.users = payload.users || [];
 }
 
+async function loadProjectChatBindings() {
+  const payload = await apiRequest("/api/projects");
+  const serverProjects = Array.isArray(payload) ? payload : [];
+  serverProjects.forEach((serverProject) => {
+    const project = projects.find((item) => item.id === serverProject.id);
+    if (!project) return;
+    project.feishuChatId = serverProject.feishuChatId || "";
+    project.owner = serverProject.ownerName || project.owner;
+  });
+}
+
 async function saveRoleBinding(userId, role, defaultProjectId) {
   const payload = await apiRequest(`/api/auth/users/${userId}`, {
     method: "PUT",
@@ -246,6 +266,38 @@ async function saveRoleBinding(userId, role, defaultProjectId) {
   if (memberProfile?.id === userId) {
     memberProfile = normalizeAuthenticatedUser(payload.user);
   }
+}
+
+async function saveProjectChatBinding(projectId, chatId) {
+  return apiRequest(`/api/projects/${projectId}/chat`, {
+    method: "PUT",
+    body: JSON.stringify({ chatId }),
+  });
+}
+
+async function syncProjectChatMembers(projectId, chatId) {
+  return apiRequest(`/api/projects/${projectId}/chat/sync`, {
+    method: "POST",
+    body: JSON.stringify({ chatId }),
+  });
+}
+
+async function syncMyFeishuChats() {
+  return apiRequest("/api/auth/feishu/my-chats/sync", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+async function loadFeishuChats() {
+  const payload = await apiRequest("/api/auth/feishu/chats");
+  authState.chats = payload.chats || [];
+}
+
+function getReportableProjects() {
+  if (!memberProfile || memberProfile.isAdmin) return projects;
+  const allowed = new Set(memberProfile.projectIds || []);
+  return projects.filter((project) => allowed.has(project.id));
 }
 
 function splitLines(text) {
@@ -1252,7 +1304,8 @@ function getLatestProjectSubmission(projectId) {
 
 function getReportProject() {
   const select = document.querySelector("#reportProjectSelect");
-  return projects.find((item) => item.id === select?.value) || projects[0];
+  const reportableProjects = getReportableProjects();
+  return reportableProjects.find((item) => item.id === select?.value) || reportableProjects[0] || projects[0];
 }
 
 function getReportMilestones(project) {
@@ -1569,14 +1622,20 @@ function renderMetrics() {
 }
 
 function renderProjectSelects() {
-  const options = projects
+  const reportableProjects = getReportableProjects();
+  const options = reportableProjects
     .map((project) => `<option value="${project.id}">${escapeHtml(project.shortName)} · ${escapeHtml(project.businessLine || "未填业务线")}</option>`)
     .join("");
   const reportProjectSelect = document.querySelector("#reportProjectSelect");
-  if (reportProjectSelect) reportProjectSelect.innerHTML = options;
+  if (reportProjectSelect) {
+    reportProjectSelect.innerHTML = options || '<option value="">暂无可维护项目</option>';
+    reportProjectSelect.disabled = !reportableProjects.length;
+  }
 
-  if (memberProfile?.projectId && reportProjectSelect) {
+  if (memberProfile?.projectId && reportProjectSelect && reportableProjects.some((project) => project.id === memberProfile.projectId)) {
     reportProjectSelect.value = memberProfile.projectId;
+  } else if (reportProjectSelect && reportableProjects[0]) {
+    reportProjectSelect.value = reportableProjects[0].id;
   }
 }
 
@@ -1685,6 +1744,82 @@ function renderAuthCenter() {
         )
         .join("")}
     </div>
+    <div class="role-binding-head project-chat-head">
+      <strong>项目群聊绑定</strong>
+      <button class="tiny-action" type="button" data-sync-my-feishu-chats>同步我的飞书群聊</button>
+      <span>先同步你账号加入的群聊和成员，再将项目绑定到对应群聊。</span>
+    </div>
+    <div class="role-binding-list">
+      ${projects
+        .map(
+          (project) => `
+            <article class="binding-row project-chat-row" data-project-chat-row="${project.id}">
+              <div class="binding-user">
+                <span class="identity-avatar is-small">${escapeHtml(project.shortName.slice(0, 1))}</span>
+                <div>
+                  <strong>${escapeHtml(project.shortName)}</strong>
+                  <span>${escapeHtml(project.businessLine || "未填业务线")}</span>
+                </div>
+              </div>
+              <label>
+                <span>群聊 chat_id</span>
+                <input data-project-chat-id="${project.id}" value="${escapeHtml(project.feishuChatId || "")}" placeholder="请选择群聊" readonly />
+              </label>
+              <div class="binding-actions">
+                <button class="secondary-action compact-action" type="button" data-open-chat-picker="${project.id}">选择群聊</button>
+                <button class="secondary-action compact-action" type="button" data-sync-project-chat="${project.id}">同步成员</button>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderChatPickerModal() {
+  const modal = document.querySelector("#chatPickerModal");
+  if (!modal) return;
+  const project = projects.find((item) => item.id === state.chatPickerProjectId);
+  const keyword = state.chatSearch.trim().toLowerCase();
+  const chats = authState.chats.filter((chat) => {
+    if (!keyword) return true;
+    const text = `${chat.name || ""} ${chat.chatId || ""} ${(chat.members || []).map((member) => member.name).join(" ")}`.toLowerCase();
+    return text.includes(keyword);
+  });
+
+  modal.classList.toggle("is-open", state.chatPickerOpen);
+  modal.setAttribute("aria-hidden", state.chatPickerOpen ? "false" : "true");
+  modal.innerHTML = `
+    <section class="modal-card chat-picker-card" role="dialog" aria-modal="true" aria-labelledby="chatPickerTitle">
+      <button class="modal-close" type="button" data-close-chat-picker aria-label="关闭群聊选择">×</button>
+      <p class="modal-eyebrow">项目群聊选择</p>
+      <h3 id="chatPickerTitle">${escapeHtml(project?.shortName || "选择项目群聊")}</h3>
+      <div class="chat-picker-tools">
+        <input id="chatPickerSearch" value="${escapeHtml(state.chatSearch)}" placeholder="搜索群聊名称、chat_id 或成员姓名" />
+        <button class="secondary-action compact-action" type="button" data-refresh-chat-list>刷新列表</button>
+      </div>
+      <div class="chat-picker-list">
+        ${
+          chats.length
+            ? chats
+                .map(
+                  (chat) => `
+                    <article class="chat-option">
+                      <div class="chat-option-main">
+                        <strong>${escapeHtml(chat.name || chat.chatId)}</strong>
+                        <span>${escapeHtml(chat.chatId)} · ${Number(chat.memberCount || chat.members?.length || 0)} 人</span>
+                        <p>${escapeHtml((chat.members || []).slice(0, 12).map((member) => member.name).filter(Boolean).join("、") || "暂无成员信息")}</p>
+                      </div>
+                      <button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}">选择</button>
+                    </article>
+                  `
+                )
+                .join("")
+            : '<div class="empty-state">暂无可选群聊。请先点击“同步我的飞书群聊”。</div>'
+        }
+      </div>
+    </section>
   `;
 }
 
@@ -2141,7 +2276,8 @@ function renderMemberWorkspace() {
 
   if (memberProfile) {
     const project = projects.find((item) => item.id === memberProfile.projectId);
-    profileText.textContent = `${memberProfile.name} · ${memberProfile.role} · 默认项目 ${project?.shortName || "未选择"}`;
+    const projectCount = memberProfile.isAdmin ? projects.length : getReportableProjects().length;
+    profileText.textContent = `${memberProfile.name} · ${memberProfile.role} · 可维护项目 ${projectCount} 个 · 默认项目 ${project?.shortName || "未选择"}`;
   } else {
     profileText.textContent = "请先通过飞书登录，再进入项目维护";
   }
@@ -2451,6 +2587,7 @@ function render() {
   renderMetrics();
   renderProjectSelects();
   renderAuthCenter();
+  renderChatPickerModal();
   renderMemberWorkspace();
   renderGovernance();
 }
@@ -2527,6 +2664,112 @@ document.addEventListener("click", (event) => {
         authState.bindingError = "";
         renderAuthCenter();
         renderMemberWorkspace();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        renderAuthCenter();
+      });
+    return;
+  }
+
+  const saveProjectChatButton = event.target.closest("[data-save-project-chat]");
+  if (saveProjectChatButton) {
+    const projectId = saveProjectChatButton.dataset.saveProjectChat;
+    const chatId = document.querySelector(`[data-project-chat-id="${projectId}"]`)?.value || "";
+    saveProjectChatBinding(projectId, chatId)
+      .then(() => {
+        const project = projects.find((item) => item.id === projectId);
+        if (project) project.feishuChatId = chatId;
+        authState.bindingError = "项目群聊已保存。";
+        renderAuthCenter();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        renderAuthCenter();
+      });
+    return;
+  }
+
+  const openChatPickerButton = event.target.closest("[data-open-chat-picker]");
+  if (openChatPickerButton) {
+    state.chatPickerProjectId = openChatPickerButton.dataset.openChatPicker;
+    state.chatPickerOpen = true;
+    state.chatSearch = "";
+    if (!authState.chats.length) {
+      loadFeishuChats()
+        .catch((error) => {
+          authState.bindingError = error.message;
+        })
+        .finally(() => render());
+    } else {
+      render();
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-close-chat-picker]") || event.target.id === "chatPickerModal") {
+    state.chatPickerOpen = false;
+    renderChatPickerModal();
+    return;
+  }
+
+  const refreshChatListButton = event.target.closest("[data-refresh-chat-list]");
+  if (refreshChatListButton) {
+    loadFeishuChats()
+      .catch((error) => {
+        authState.bindingError = error.message;
+      })
+      .finally(() => render());
+    return;
+  }
+
+  const pickChatButton = event.target.closest("[data-pick-chat]");
+  if (pickChatButton) {
+    const projectId = state.chatPickerProjectId;
+    const chatId = pickChatButton.dataset.pickChat;
+    saveProjectChatBinding(projectId, chatId)
+      .then(() => syncProjectChatMembers(projectId, chatId))
+      .then((payload) => {
+        const project = projects.find((item) => item.id === projectId);
+        if (project) project.feishuChatId = payload.chatId || chatId;
+        authState.bindingError = `已绑定群聊并同步 ${payload.members?.length || 0} 位成员。`;
+        state.chatPickerOpen = false;
+        render();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        render();
+      });
+    return;
+  }
+
+  const syncMyFeishuChatsButton = event.target.closest("[data-sync-my-feishu-chats]");
+  if (syncMyFeishuChatsButton) {
+    syncMyFeishuChats()
+      .then((payload) => {
+        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录。`;
+        return loadFeishuChats();
+      })
+      .then(() => {
+        renderAuthCenter();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        renderAuthCenter();
+      });
+    return;
+  }
+
+  const syncProjectChatButton = event.target.closest("[data-sync-project-chat]");
+  if (syncProjectChatButton) {
+    const projectId = syncProjectChatButton.dataset.syncProjectChat;
+    const chatId = document.querySelector(`[data-project-chat-id="${projectId}"]`)?.value || "";
+    syncProjectChatMembers(projectId, chatId)
+      .then((payload) => {
+        const project = projects.find((item) => item.id === projectId);
+        if (project) project.feishuChatId = payload.chatId || chatId;
+        authState.bindingError = `已同步 ${payload.members?.length || 0} 位群成员。`;
+        renderAuthCenter();
       })
       .catch((error) => {
         authState.bindingError = error.message;
@@ -2873,6 +3116,13 @@ document.addEventListener("change", (event) => {
   }
 });
 
+document.addEventListener("input", (event) => {
+  if (event.target.id === "chatPickerSearch") {
+    state.chatSearch = event.target.value;
+    renderChatPickerModal();
+  }
+});
+
 document.querySelector("#memberReportForm").addEventListener("input", (event) => {
   if (
     event.target.matches(
@@ -2890,6 +3140,11 @@ document.querySelector("#memberReportForm").addEventListener("submit", (event) =
     window.location.hash = "register";
     authState.error = "请先通过飞书登录后再提交项目更新。";
     render();
+    return;
+  }
+  if (!getReportableProjects().length) {
+    state.saveNotice = "你暂未匹配到项目群聊，请联系管理员绑定项目群并同步成员。";
+    renderMemberWorkspace();
     return;
   }
 

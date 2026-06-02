@@ -204,6 +204,8 @@ http://172.20.185.141/api/auth/feishu/callback
 4. 在权限管理中申请至少这些权限：
    - `contact:user.base:readonly`
    - `auth:user.id:read`
+   - `im:chat:readonly`（读取当前授权用户所在群聊时需要）
+   - `im:chat.member:readonly`（读取群成员时需要）
 
 ### 环境变量
 
@@ -213,8 +215,59 @@ http://172.20.185.141/api/auth/feishu/callback
 FEISHU_APP_ID="cli_xxx"
 FEISHU_APP_SECRET="xxx"
 FEISHU_REDIRECT_URI="https://your-domain.com/api/auth/feishu/callback"
-FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read"
+FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:readonly im:chat.member:readonly"
+FEISHU_CHAT_ID="oc_xxx"
 ```
+
+### 获取飞书群成员姓名
+
+如果要通过开放平台读取某个飞书群的成员姓名，需要先确认：
+
+1. 应用已获得 `im:chat.member:readonly` 和 `contact:user.base:readonly` 权限，并完成管理员审批。
+2. 应用机器人已加入目标群，或应用具备读取该群成员的权限。
+3. 已拿到目标群的 `chat_id`。
+
+服务器上可以执行：
+
+```bash
+cd /srv/key-project-dashboard
+npm run feishu:chat-members -- --chat-id oc_xxx
+```
+
+如果 `.env` 已配置 `FEISHU_CHAT_ID`，也可以直接执行：
+
+```bash
+npm run feishu:chat-members
+```
+
+需要机器可读结果时：
+
+```bash
+npm run feishu:chat-members -- --json
+```
+
+### 绑定项目群聊到项目维护权限
+
+管理员登录系统后，进入：
+
+```text
+身份与权限 -> 项目群聊绑定
+```
+
+操作顺序：
+
+1. 点击 `同步我的飞书群聊`，系统会用当前管理员的飞书授权读取该账号加入的群聊，并把群聊和成员写入数据库。
+2. 在对应项目点击 `选择群聊`。
+3. 在弹窗中查看群聊名称、成员数和成员名单，选择真实项目群。
+4. 系统会自动绑定该群聊并同步成员到项目成员表。
+
+同步后系统会把该群成员写入项目成员表。项目成员再次进入系统时，会按飞书身份自动匹配可维护项目；项目维护页的项目下拉只展示该成员所在项目群对应的项目。后端接口也会校验成员是否属于项目群，避免绕过页面直接提交其他项目。
+
+注意：
+
+- `同步我的飞书群聊` 获取的是当前授权用户加入的群聊，不是企业内全部群聊。
+- 如果飞书用户授权过期，需要重新飞书登录后再同步。
+- 需要应用权限包含 `im:chat:readonly`、`im:chat.member:readonly`、`contact:user.base:readonly`。
 
 ### 当前权限策略
 

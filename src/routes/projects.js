@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { MilestoneStatus, ProjectStage } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { authenticate } from "../middleware/authenticate.js";
+import { authenticate, requireRoles } from "../middleware/authenticate.js";
+import { canUserMaintainProject, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
 
 export const projectRouter = Router();
 
@@ -16,6 +17,7 @@ projectRouter.get("/", async (_req, res) => {
       shortName: true,
       businessLine: true,
       ownerName: true,
+      feishuChatId: true,
       established: true,
       stage: true,
       updatedAt: true,
@@ -24,7 +26,50 @@ projectRouter.get("/", async (_req, res) => {
   res.json(projects);
 });
 
+projectRouter.put("/:id/chat", requireRoles("ADMIN"), async (req, res) => {
+  const chatId = String(req.body?.chatId || "").trim();
+  if (!chatId) return res.status(400).json({ message: "chat_id 必填" });
+  const chat = await prisma.feishuChat.findUnique({ where: { chatId } });
+  if (!chat) return res.status(400).json({ message: "该群聊尚未同步，请先同步我的飞书群聊后再选择" });
+
+  const project = await prisma.project.update({
+    where: { id: req.params.id },
+    data: { feishuChatId: chatId },
+    select: {
+      id: true,
+      shortName: true,
+      feishuChatId: true,
+    },
+  });
+  res.json({ project });
+});
+
+projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), async (req, res) => {
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, feishuChatId: true },
+  });
+  if (!project) return res.status(404).json({ message: "项目不存在" });
+
+  const chatId = String(req.body?.chatId || project.feishuChatId || "").trim();
+  if (!chatId) return res.status(400).json({ message: "请先配置项目群 chat_id" });
+
+  const members = await syncProjectMembersFromFeishuChat(req.params.id, chatId);
+  res.json({
+    ok: true,
+    chatId,
+    members: members.map((member) => ({
+      memberId: member.memberId,
+      name: member.name,
+      email: member.email,
+    })),
+  });
+});
+
 projectRouter.put("/:id/brief", async (req, res) => {
+  if (!(await canUserMaintainProject(req.user, req.params.id))) {
+    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
+  }
   const { ownerName, description, stage, changeSummary } = req.body || {};
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -39,6 +84,9 @@ projectRouter.put("/:id/brief", async (req, res) => {
 });
 
 projectRouter.put("/:id/metrics", async (req, res) => {
+  if (!(await canUserMaintainProject(req.user, req.params.id))) {
+    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
+  }
   const metrics = Array.isArray(req.body?.metrics) ? req.body.metrics : [];
   await prisma.$transaction(async (tx) => {
     await tx.metric.deleteMany({ where: { projectId: req.params.id } });
@@ -59,6 +107,9 @@ projectRouter.put("/:id/metrics", async (req, res) => {
 });
 
 projectRouter.put("/:id/milestones", async (req, res) => {
+  if (!(await canUserMaintainProject(req.user, req.params.id))) {
+    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
+  }
   const milestones = Array.isArray(req.body?.milestones) ? req.body.milestones : [];
   await prisma.$transaction(async (tx) => {
     await tx.milestone.deleteMany({ where: { projectId: req.params.id } });

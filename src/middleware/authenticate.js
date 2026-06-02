@@ -18,6 +18,7 @@ export async function authenticate(req, res, next) {
         avatarUrl: true,
         feishuOpenId: true,
         feishuUnionId: true,
+        feishuUserId: true,
       },
     });
     if (!user) return res.status(401).json({ message: "用户不存在" });
