@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>重点项目管理驾驶舱</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">重点项目管理</p>
+          <h1>部门重点项目驾驶舱</h1>
+        </div>
+        <div class="topbar-actions">
+          <nav class="view-switch" aria-label="页面切换">
+            <button class="view-button is-active" type="button" data-view="dashboard">管理看板</button>
+            <button class="view-button" type="button" data-view="calendar">里程碑日历</button>
+            <button class="view-button" type="button" data-view="report">项目维护</button>
+            <button class="view-button" type="button" data-view="governance">PMO治理</button>
+          </nav>
+          <button class="profile-entry" type="button" data-view="register">身份与权限</button>
+          <span class="date-chip" id="todayLabel">2026年5月</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="app-view is-active" id="dashboardView">
+          <section class="insight-board" id="insightBoard">
+            <section class="summary-grid" id="summaryGrid" aria-label="项目总览"></section>
+
+            <section class="attention-board" aria-label="本周关注事项">
+              <div class="attention-head">
+                <div>
+                  <h2>本周关注</h2>
+                  <p>自动聚合风险、逾期、未更新与指标缺口</p>
+                </div>
+              </div>
+              <div class="attention-list" id="attentionList"></div>
+            </section>
+
+            <section class="toolbar" aria-label="项目筛选">
+              <div>
+                <h2>项目清单</h2>
+                <p>按业务线、关注状态和关键里程碑快速定位项目</p>
+              </div>
+              <div class="toolbar-controls">
+                <label class="select-field">
+                  <span>业务线</span>
+                  <select id="businessLineFilter"></select>
+                </label>
+                <div class="segmented-control" id="filterTabs"></div>
+              </div>
+            </section>
+          </section>
+
+          <section class="dashboard-layout">
+            <div class="main-column">
+              <section class="panel project-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>重点项目</h2>
+                    <p id="projectCountText"></p>
+                  </div>
+                </div>
+                <div class="project-list" id="projectList"></div>
+              </section>
+            </div>
+
+            <aside class="side-column">
+              <section class="panel detail-panel" id="projectDetail"></section>
+              <section class="panel risk-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>风险提示</h2>
+                    <p>需要管理层关注的问题</p>
+                  </div>
+                </div>
+                <div id="riskList" class="risk-list"></div>
+              </section>
+            </aside>
+          </section>
+
+        </section>
+
+        <section class="app-view" id="calendarView">
+          <section class="panel calendar-panel calendar-page">
+            <div class="panel-header">
+              <div>
+                <h2 id="calendarTitle">本月里程碑</h2>
+                <p>按项目颜色区分关键交付，点击卡片查看里程碑详情</p>
+              </div>
+              <div class="calendar-tools">
+                <div class="month-switcher">
+                  <button type="button" data-month-shift="-1" aria-label="上个月">‹</button>
+                  <span id="calendarMonthLabel">2026年5月</span>
+                  <button type="button" data-month-shift="1" aria-label="下个月">›</button>
+                </div>
+              </div>
+            </div>
+            <div class="project-legend" id="calendarProjectLegend" aria-label="项目筛选"></div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </section>
+        </section>
+
+        <section class="app-view" id="registerView">
+          <section class="member-layout register-layout">
+            <div class="member-hero">
+              <p class="eyebrow">飞书身份验证</p>
+              <h2>使用企业身份进入系统并绑定系统角色</h2>
+              <p>系统通过飞书完成身份验证。管理员可将人员绑定为项目成员或管理员，并指定默认维护项目。</p>
+            </div>
+
+            <section class="panel member-card auth-card" id="memberRegisterPanel">
+              <div class="panel-header">
+                <div>
+                  <h2>登录状态</h2>
+                  <p>通过飞书登录后自动建立人员档案</p>
+                </div>
+              </div>
+              <div id="authPanelContent" class="auth-panel-content"></div>
+            </section>
+
+            <section class="panel member-card auth-card" id="roleBindingPanel">
+              <div class="panel-header">
+                <div>
+                  <h2>人员与角色绑定</h2>
+                  <p>管理员可维护系统角色和默认项目</p>
+                </div>
+              </div>
+              <div id="roleBindingContent" class="role-binding-content"></div>
+            </section>
+          </section>
+        </section>
+
+        <section class="app-view" id="reportView">
+          <section class="report-workbench">
+            <aside class="report-sidebar">
+              <section class="panel member-card profile-card">
+                <div class="panel-header">
+                  <div>
+                    <h2>填报人</h2>
+                    <p id="memberProfileText">请先通过飞书登录</p>
+                  </div>
+                </div>
+                <button class="secondary-action" type="button" data-view="register">身份与权限</button>
+              </section>
+              <section class="panel member-card">
+                <div class="panel-header">
+                  <div>
+                    <h2>项目概览</h2>
+                    <p>随项目选择自动更新</p>
+                  </div>
+                </div>
+                <div id="reportProjectBrief" class="report-brief"></div>
+              </section>
+              <section class="panel member-card">
+                <div class="panel-header">
+                  <div>
+                    <h2>本周状态</h2>
+                    <p>确认填报内容与看板同步情况</p>
+                  </div>
+                </div>
+                <div id="reportStatusPanel" class="report-status-panel"></div>
+              </section>
+              <section class="panel member-card">
+                <div class="panel-header">
+                  <div>
+                    <h2>最近填报</h2>
+                    <p>用于回看成员提交记录</p>
+                  </div>
+                </div>
+                <div id="submissionList" class="submission-list"></div>
+              </section>
+            </aside>
+
+            <section class="panel member-card report-card" id="memberReportPanel">
+              <div class="panel-header report-titlebar">
+                <div>
+                  <h2>项目维护</h2>
+                  <p>先维护项目指标，再围绕里程碑保存本周更新</p>
+                </div>
+                <label class="report-project-picker">
+                  <span>项目</span>
+                  <select name="projectId" id="reportProjectSelect" form="memberReportForm" required></select>
+                </label>
+              </div>
+              <form class="member-form report-form" id="memberReportForm">
+                <section class="project-metric-panel">
+                  <div class="panel-header compact-header metric-panel-head">
+                    <div>
+                      <h2>项目指标</h2>
+                      <p>维护目标、当前值和观测口径</p>
+                    </div>
+                  </div>
+                  <div id="reportProjectMetrics" class="project-metric-editor"></div>
+                </section>
+                <section class="maintenance-layout">
+                  <aside class="milestone-maintainer">
+                    <div class="maintainer-head">
+                      <div>
+                        <span class="week-label">MILESTONES</span>
+                        <strong>项目里程碑</strong>
+                      </div>
+                      <div class="maintainer-actions">
+                        <button class="tiny-action milestone-add-button" type="button" data-add-milestone>新增</button>
+                        <button class="tiny-action milestone-save-button" type="button" data-save-milestones>保存</button>
+                        <button class="tiny-action" type="button" id="milestoneManageToggle">维护</button>
+                      </div>
+                    </div>
+                    <div class="milestone-rail" id="reportMilestoneRail"></div>
+                  </aside>
+
+                  <div class="maintenance-editor">
+                    <section class="week-board" aria-label="周度填报进度">
+                      <div class="week-board-header">
+                        <span class="week-label">WEEKS</span>
+                        <span id="weekRangeLabel">节点周期</span>
+                      </div>
+                      <div class="week-timeline" id="weekTimeline"></div>
+                      <div class="milestone-focus">
+                        <div class="milestone-focus-head">
+                          <strong id="weekPrompt">尽快更新本周情况</strong>
+                          <button class="tiny-action" type="button" id="milestoneEditToggle">修改</button>
+                        </div>
+                        <div class="milestone-inline-editor">
+                          <label class="milestone-edit-field">
+                            <span>名称</span>
+                            <input name="milestoneTitle" placeholder="例如：完成试点上线" />
+                          </label>
+                          <label class="milestone-edit-field">
+                            <span>日期</span>
+                            <input name="milestoneDate" type="date" />
+                          </label>
+                          <label>
+                            <span>状态</span>
+                            <select name="milestoneStatus">
+                              <option value="planned">计划中</option>
+                              <option value="doing">进行中</option>
+                              <option value="done">已完成</option>
+                              <option value="changed">变更</option>
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="week-snapshot" id="weekSnapshot"></div>
+                    </section>
+                    <section class="report-section">
+                      <div class="step-mark">1</div>
+                      <label>
+                        <span>本周进展</span>
+                        <textarea name="progress" rows="5" required placeholder="建议结构：已完成 / 进行中 / 下周计划 / 需要协调"></textarea>
+                      </label>
+                      <div class="quick-fill">
+                        <button type="button" data-template="progress">进展</button>
+                        <button type="button" data-template="riskfree">无风险</button>
+                        <button type="button" data-template="blocker">需协同</button>
+                      </div>
+                    </section>
+                    <section class="report-section">
+                      <div class="step-mark">2</div>
+                      <label>
+                        <span>风险与支持诉求</span>
+                        <textarea name="risk" rows="3" placeholder="如无风险可填：暂无"></textarea>
+                      </label>
+                    </section>
+                  </div>
+                </section>
+                <button class="primary-action" type="submit">保存本周更新</button>
+              </form>
+            </section>
+          </section>
+        </section>
+
+        <section class="app-view" id="governanceView">
+          <section class="governance-layout">
+            <section class="panel governance-hero">
+              <div>
+                <p class="eyebrow">PMO治理</p>
+                <h2>把项目管理从“看进展”推进到“管质量”</h2>
+                <p>集中识别未更新、缺指标、缺里程碑日期、逾期和风险未闭环事项，帮助 PMO 快速追踪问题项目。</p>
+              </div>
+              <div id="governanceSummary" class="governance-summary"></div>
+            </section>
+
+            <section class="panel governance-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>治理待办</h2>
+                  <p id="governanceListMeta">点击事项可定位到对应项目</p>
+                </div>
+              </div>
+              <div class="governance-controls">
+                <div class="segmented-control" id="governanceLevelTabs" aria-label="治理优先级筛选"></div>
+                <label class="select-field compact-select">
+                  <span>治理类型</span>
+                  <select id="governanceTypeFilter"></select>
+                </label>
+              </div>
+              <div id="governanceList" class="governance-list"></div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="milestoneModal" aria-hidden="true">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="milestoneModalTitle">
+        <button class="modal-close" id="modalCloseButton" type="button" aria-label="关闭里程碑详情">×</button>
+        <div id="milestoneModalContent"></div>
+      </section>
+    </div>
+
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

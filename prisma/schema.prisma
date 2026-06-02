@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum ProjectStage {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CHANGED
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CHANGED
+  OVERDUE
+  UPCOMING
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RiskStatus {
+  OPEN
+  MITIGATING
+  CLOSED
+}
+
+enum GovernanceLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum GovernanceStatus {
+  TODO
+  DOING
+  DONE
+}
+
+model User {
+  id             String         @id @default(cuid())
+  name           String
+  email          String         @unique
+  passwordHash   String?
+  role           UserRole       @default(MEMBER)
+  feishuOpenId   String?        @unique
+  feishuUnionId  String?        @unique
+  feishuUserId   String?
+  avatarUrl      String?
+  defaultProjectId String?
+  defaultProject Project?       @relation("DefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+  reports        WeeklyReport[] @relation("ReportAuthor")
+  auditLogs      AuditLog[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model Project {
+  id               String            @id
+  code             String?           @unique
+  name             String
+  shortName        String
+  businessLine     String
+  description      String            @db.Text
+  metricsSummary   String            @db.Text
+  keyNodesSummary  String            @db.Text
+  futurePlan       String            @db.Text
+  teamSummary      String            @db.Text
+  ownerName        String?
+  established      Boolean           @default(true)
+  isKeyProject     Boolean           @default(true)
+  stage            ProjectStage      @default(PLANNED)
+  changeSummary    String?           @db.Text
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  defaultUsers     User[]            @relation("DefaultProject")
+  milestones       Milestone[]
+  metrics          Metric[]
+  risks            Risk[]
+  reports          WeeklyReport[]
+  governanceTasks  GovernanceTask[]
+}
+
+model Milestone {
+  id            String           @id @default(cuid())
+  projectId     String
+  title         String
+  source        String?
+  rawText       String?          @db.Text
+  dueDate       DateTime?
+  status        MilestoneStatus  @default(PLANNED)
+  sortOrder     Int              @default(0)
+  changeSummary String?          @db.Text
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reports       WeeklyReport[]
+
+  @@index([projectId, sortOrder])
+}
+
+model Metric {
+  id             String         @id @default(cuid())
+  projectId      String
+  name           String
+  unit           String?
+  currentValue   String?
+  targetValue    String?
+  observation    String?        @db.Text
+  chartType      String?
+  sortOrder      Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  records        MetricRecord[]
+
+  @@index([projectId, sortOrder])
+}
+
+model MetricRecord {
+  id          String    @id @default(cuid())
+  metricId    String
+  recordDate  DateTime
+  value       String
+  note        String?   @db.Text
+  createdAt   DateTime  @default(now())
+  metric      Metric    @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  @@index([metricId, recordDate])
+}
+
+model Risk {
+  id          String      @id @default(cuid())
+  projectId   String
+  title       String
+  detail      String      @db.Text
+  level       RiskLevel   @default(MEDIUM)
+  ownerName   String?
+  dueDate     DateTime?
+  status      RiskStatus  @default(OPEN)
+  source      String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+}
+
+model WeeklyReport {
+  id             String      @id @default(cuid())
+  projectId      String
+  milestoneId    String?
+  authorId       String
+  weekNumber     Int
+  progress       String      @db.Text
+  riskSummary    String?     @db.Text
+  milestoneTitle String?
+  milestoneDate  DateTime?
+  milestoneState MilestoneStatus?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone      Milestone?  @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  author         User        @relation("ReportAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, weekNumber])
+}
+
+model GovernanceTask {
+  id          String            @id @default(cuid())
+  projectId   String
+  taskType    String
+  title       String
+  detail      String            @db.Text
+  level       GovernanceLevel   @default(MEDIUM)
+  status      GovernanceStatus  @default(TODO)
+  ownerName   String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  action      String
+  targetType  String
+  targetId    String
+  detail      String?   @db.Text
+  createdAt   DateTime  @default(now())
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+}
