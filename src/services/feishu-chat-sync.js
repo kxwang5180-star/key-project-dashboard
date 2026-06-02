@@ -95,14 +95,24 @@ export async function syncMyFeishuChatsAndMembers(userId) {
   const userAccessToken = await getValidUserAccessToken(userId);
   const [tenantAccessToken, chats] = await Promise.all([fetchTenantAccessToken(), fetchFeishuUserChats(userAccessToken)]);
   let memberTotal = 0;
+  const errors = [];
 
   for (const chat of chats) {
     const chatId = chat.chat_id || chat.chatId;
     if (!chatId) continue;
 
-    const members = await fetchFeishuChatMembers(chatId, tenantAccessToken, {
-      memberIdType: "user_id",
-    });
+    let members = [];
+    try {
+      members = await fetchFeishuChatMembers(chatId, tenantAccessToken, {
+        memberIdType: "user_id",
+      });
+    } catch (error) {
+      errors.push({
+        chatId,
+        name: chat.name || chatId,
+        message: error.message,
+      });
+    }
     const resolvedMembers = [];
     for (const member of members) {
       resolvedMembers.push(await resolveChatMember(member, tenantAccessToken));
@@ -116,7 +126,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           name: chat.name || chatId,
           description: chat.description || null,
           ownerUserId: userId,
-          memberCount: resolvedMembers.length,
+          memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
           lastSyncedAt: new Date(),
         },
         create: {
@@ -124,7 +134,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           name: chat.name || chatId,
           description: chat.description || null,
           ownerUserId: userId,
-          memberCount: resolvedMembers.length,
+          memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
           lastSyncedAt: new Date(),
         },
       });
@@ -178,5 +188,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
   return {
     chatCount: chats.length,
     memberCount: memberTotal,
+    errorCount: errors.length,
+    errors,
   };
 }

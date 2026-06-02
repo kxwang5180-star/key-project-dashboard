@@ -1,12 +1,27 @@
 import { Router } from "express";
 import { MilestoneStatus, ProjectStage } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
 
 export const projectRouter = Router();
 
 projectRouter.use(authenticate);
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function canManageIdentity(user) {
+  if (user?.role !== "ADMIN") return false;
+  const email = normalizeEmail(user.email);
+  const name = String(user.name || "").trim();
+  return Boolean(
+    (email && config.feishu.identityAdminEmails.includes(email)) ||
+      (name && config.feishu.identityAdminNames.includes(name))
+  );
+}
 
 projectRouter.get("/", async (req, res) => {
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
@@ -29,6 +44,9 @@ projectRouter.get("/", async (req, res) => {
 });
 
 projectRouter.put("/:id/chat", requireRoles("ADMIN"), async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以绑定项目群聊" });
+  }
   const chatId = String(req.body?.chatId || "").trim();
   if (!chatId) return res.status(400).json({ message: "chat_id 必填" });
   const chat = await prisma.feishuChat.findUnique({ where: { chatId } });
@@ -47,6 +65,9 @@ projectRouter.put("/:id/chat", requireRoles("ADMIN"), async (req, res) => {
 });
 
 projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以同步项目群成员" });
+  }
   const project = await prisma.project.findUnique({
     where: { id: req.params.id },
     select: { id: true, feishuChatId: true },

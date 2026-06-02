@@ -17,6 +17,25 @@ import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/f
 
 export const authRouter = Router();
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function canManageIdentity(user) {
+  if (user?.role !== "ADMIN") return false;
+  const email = normalizeEmail(user.email);
+  const name = String(user.name || "").trim();
+  return Boolean(
+    (email && config.feishu.identityAdminEmails.includes(email)) ||
+      (name && config.feishu.identityAdminNames.includes(name))
+  );
+}
+
+function isSystemBootstrapUser(user) {
+  const email = normalizeEmail(user.email);
+  return user.name === config.admin.name || email === normalizeEmail(config.admin.email) || email === "admin@example.com";
+}
+
 function toPublicUser(user, allowedProjectIds = []) {
   return {
     id: user.id,
@@ -29,6 +48,7 @@ function toPublicUser(user, allowedProjectIds = []) {
     projectIds: allowedProjectIds,
     avatarUrl: user.avatarUrl || null,
     feishuLinked: Boolean(user.feishuOpenId || user.feishuUnionId),
+    canManageIdentity: canManageIdentity(user),
   };
 }
 
@@ -192,7 +212,10 @@ authRouter.get("/me", authenticate, async (req, res) => {
   res.json({ user: toPublicUser(req.user, allowedProjectIds) });
 });
 
-authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (_req, res) => {
+authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以维护人员与项目群聊绑定" });
+  }
   const users = await prisma.user.findMany({
     orderBy: [{ role: "asc" }, { createdAt: "desc" }],
     select: {
@@ -209,19 +232,36 @@ authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (_req, res) 
     },
   });
   res.json({
-    users: users.map((user) => toPublicUser(user)),
+    users: users.filter((user) => !isSystemBootstrapUser(user)).map((user) => toPublicUser(user)),
   });
 });
 
 authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), async (req, res) => {
-  const result = await syncMyFeishuChatsAndMembers(req.user.id);
-  res.json({
-    ok: true,
-    ...result,
-  });
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以同步飞书群聊" });
+  }
+  try {
+    const result = await syncMyFeishuChatsAndMembers(req.user.id);
+    res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("[feishu-chat-sync] failed", {
+      message: error.message,
+      userId: req.user.id,
+      scopes: config.feishu.scopes,
+    });
+    res.status(502).json({
+      message: `飞书群聊同步失败：${error.message}。请确认 FEISHU_SCOPES 包含 im:chat:read 和 im:chat.members:read，并重新飞书登录授权。`,
+    });
+  }
 });
 
-authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (_req, res) => {
+authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以查看已同步群聊" });
+  }
   const chats = await prisma.feishuChat.findMany({
     orderBy: [{ lastSyncedAt: "desc" }, { name: "asc" }],
     include: {
@@ -251,6 +291,9 @@ authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (_req
 });
 
 authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以维护人员角色" });
+  }
   const { role, defaultProjectId = null } = req.body || {};
   const nextRole = role === "ADMIN" ? "ADMIN" : "MEMBER";
   const user = await prisma.user.update({

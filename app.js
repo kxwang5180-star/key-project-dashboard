@@ -66,6 +66,7 @@ function getViewHash(view) {
 
 function getAllowedView(view) {
   if (!memberProfile) return view === "register" ? "register" : "register";
+  if (view === "register" && !memberProfile.canManageIdentity) return memberProfile.isAdmin ? "dashboard" : "report";
   if (!memberProfile.isAdmin) return "report";
   return view;
 }
@@ -163,6 +164,17 @@ function compactText(text, maxLength = 86) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
+function getDisplayInitials(name) {
+  const chars = Array.from(String(name || "").trim());
+  return chars.slice(-2).join("") || "未填";
+}
+
+function getUserContactLabel(user) {
+  const email = String(user?.email || "").trim();
+  if (!email || email.endsWith("@local.invalid")) return user?.feishuLinked ? "飞书身份已绑定" : "未获取到邮箱";
+  return email;
+}
+
 function getRoleLabel(role) {
   return role === "ADMIN" ? "管理员" : "项目成员";
 }
@@ -181,6 +193,7 @@ function normalizeAuthenticatedUser(user) {
     avatarUrl: user.avatarUrl || "",
     feishuLinked: Boolean(user.feishuLinked),
     isAdmin: user.role === "ADMIN",
+    canManageIdentity: Boolean(user.canManageIdentity),
   };
 }
 
@@ -220,7 +233,7 @@ async function loadCurrentUser() {
     if (memberProfile) {
       await loadProjectChatBindings();
     }
-    if (memberProfile?.isAdmin) {
+    if (memberProfile?.canManageIdentity) {
       await loadRoleBindings();
     } else {
       authState.users = [];
@@ -239,7 +252,7 @@ async function loadCurrentUser() {
 }
 
 async function loadRoleBindings() {
-  if (!memberProfile?.isAdmin) {
+  if (!memberProfile?.canManageIdentity) {
     authState.users = [];
     return;
   }
@@ -927,7 +940,8 @@ function renderViewSwitch() {
     const memberOnlyAllowed = memberProfile && !memberProfile.isAdmin && view !== "report";
     const anonymousBlocked = !memberProfile && view !== "register";
     const adminOnlyView = view === "governance" && !memberProfile?.isAdmin;
-    button.classList.toggle("is-hidden", Boolean(memberOnlyAllowed || anonymousBlocked || adminOnlyView));
+    const identityOnlyView = view === "register" && memberProfile && !memberProfile.canManageIdentity;
+    button.classList.toggle("is-hidden", Boolean(memberOnlyAllowed || anonymousBlocked || adminOnlyView || identityOnlyView));
   });
   document.querySelectorAll(".view-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === state.currentView);
@@ -1678,10 +1692,10 @@ function renderAuthCenter() {
   authPanel.innerHTML = `
     <div class="identity-card">
       <div class="identity-main">
-        <span class="identity-avatar">${escapeHtml(memberProfile.name.slice(0, 1))}</span>
+        <span class="identity-avatar">${escapeHtml(getDisplayInitials(memberProfile.name))}</span>
         <div class="identity-copy">
           <strong>${escapeHtml(memberProfile.name)}</strong>
-          <span>${escapeHtml(memberProfile.email)}</span>
+          <span>${escapeHtml(getUserContactLabel(memberProfile))}</span>
         </div>
       </div>
       <div class="identity-meta">
@@ -1700,7 +1714,7 @@ function renderAuthCenter() {
     </div>
   `;
 
-  if (!memberProfile.isAdmin) {
+  if (!memberProfile.canManageIdentity) {
     roleBindingWrapper.classList.add("is-hidden");
     roleBindingPanel.innerHTML = "";
     return;
@@ -1719,10 +1733,10 @@ function renderAuthCenter() {
           (user) => `
             <article class="binding-row" data-user-row="${user.id}">
               <div class="binding-user">
-                <span class="identity-avatar is-small">${escapeHtml(user.name.slice(0, 1))}</span>
+                <span class="identity-avatar is-small">${escapeHtml(getDisplayInitials(user.name))}</span>
                 <div>
                   <strong>${escapeHtml(user.name)}</strong>
-                  <span>${escapeHtml(user.email)}</span>
+                  <span>${escapeHtml(getUserContactLabel(user))}</span>
                 </div>
               </div>
               <label>
@@ -2752,7 +2766,8 @@ document.addEventListener("click", (event) => {
   if (syncMyFeishuChatsButton) {
     syncMyFeishuChats()
       .then((payload) => {
-        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录。`;
+        const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
+        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录${errorTip}。`;
         return loadFeishuChats();
       })
       .then(() => {
