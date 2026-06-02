@@ -28,6 +28,7 @@ const state = {
   chatPickerOpen: false,
   chatPickerProjectId: "",
   chatSearch: "",
+  chatSearchComposing: false,
   expandedProjectGroups: {},
   userEditModalOpen: false,
   userEditTargetId: null,
@@ -180,6 +181,10 @@ function getUserContactLabel(user) {
   const email = String(user?.email || "").trim();
   if (!email || email.endsWith("@local.invalid")) return user?.feishuLinked ? "飞书身份已绑定" : "未获取到邮箱";
   return email;
+}
+
+function sortUsersByName(users) {
+  return [...users].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
 }
 
 function getRoleLabel(role) {
@@ -1787,9 +1792,10 @@ function renderAuthCenter() {
   roleBindingWrapper.classList.remove("is-hidden");
 
   // Group users by projectId
+  const adminUsers = sortUsersByName(authState.users.filter((user) => user.roleKey === "ADMIN"));
   const projectUsers = {};
   const unassignedUsers = [];
-  for (const user of authState.users) {
+  for (const user of authState.users.filter((item) => item.roleKey !== "ADMIN")) {
     if (user.projectId && projects.some((p) => p.id === user.projectId)) {
       if (!projectUsers[user.projectId]) projectUsers[user.projectId] = [];
       projectUsers[user.projectId].push(user);
@@ -1799,11 +1805,14 @@ function renderAuthCenter() {
   }
 
   const groupEntries = [
+    ...(adminUsers.length
+      ? [{ project: { id: "__admins", shortName: "管理员", businessLine: "统一管理全局权限", color: "#5b4cc4" }, users: adminUsers }]
+      : []),
     ...projects
       .filter((p) => projectUsers[p.id]?.length)
-      .map((p) => ({ project: p, users: projectUsers[p.id] })),
+      .map((p) => ({ project: p, users: sortUsersByName(projectUsers[p.id]) })),
     ...(unassignedUsers.length
-      ? [{ project: { id: "__unassigned", shortName: "未分配项目", businessLine: "暂未指定默认项目", color: "#6b7280" }, users: unassignedUsers }]
+      ? [{ project: { id: "__unassigned", shortName: "未分配项目", businessLine: "暂未指定默认项目", color: "#6b7280" }, users: sortUsersByName(unassignedUsers) }]
       : []),
   ];
 
@@ -1816,11 +1825,16 @@ function renderAuthCenter() {
       .join("");
 
   const refreshLabel = authState.usersRefreshing ? "刷新中..." : "刷新";
+  const syncChatLabel = authState.chatSyncing ? "同步中..." : "同步我的飞书群聊";
 
   roleBindingPanel.innerHTML = `
     <div class="role-binding-head">
       <strong>${authState.users.length} 位已登录用户</strong>
-      <button class="tiny-action" type="button" data-refresh-users ${authState.usersRefreshing ? "disabled" : ""}>${refreshLabel}</button>
+      <div class="role-binding-toolbar">
+        <button class="tiny-action" type="button" data-view="dashboard">返回看板</button>
+        <button class="tiny-action" type="button" data-logout>退出登录</button>
+        <button class="tiny-action" type="button" data-refresh-users ${authState.usersRefreshing ? "disabled" : ""}>${refreshLabel}</button>
+      </div>
     </div>
     ${authState.bindingError ? `<div class="save-notice">${escapeHtml(authState.bindingError)}</div>` : ""}
     ${
@@ -1870,10 +1884,12 @@ function renderAuthCenter() {
     </div>
     <div class="role-binding-head project-chat-head">
       <strong>项目群聊绑定</strong>
-      <button class="tiny-action" type="button" data-sync-my-feishu-chats ${authState.chatSyncing ? "disabled" : ""}>${authState.chatSyncing ? "同步中..." : "同步我的飞书群聊"}</button>
+      <div class="role-binding-toolbar">
+        <button class="tiny-action" type="button" data-sync-my-feishu-chats ${authState.chatSyncing ? "disabled" : ""}>${syncChatLabel}</button>
+      </div>
       <span>先同步你账号加入的群聊和成员，再将项目绑定到对应群聊。</span>
     </div>
-    <div class="role-binding-list">
+    <div class="role-binding-list chat-binding-grid">
       ${projects
         .map(
           (project) => `
@@ -2916,7 +2932,13 @@ document.addEventListener("click", (event) => {
   if (refreshChatListButton) {
     authState.chatsRefreshing = true;
     renderChatPickerModal();
-    loadFeishuChats()
+    syncMyFeishuChats()
+      .then((payload) => {
+        const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败` : "";
+        authState.bindingError = `群聊列表已刷新：${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录${errorTip}。`;
+        authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
+        return loadFeishuChats();
+      })
       .catch((error) => {
         authState.bindingError = error.message;
       })
@@ -3397,6 +3419,7 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("input", (event) => {
   if (event.target.id === "chatPickerSearch") {
+    if (state.chatSearchComposing) return;
     state.chatSearch = event.target.value;
     renderChatPickerModal();
   }
@@ -3412,6 +3435,20 @@ document.addEventListener("input", (event) => {
     });
     draftStore.milestones[project.id] = milestones;
     return;
+  }
+});
+
+document.addEventListener("compositionstart", (event) => {
+  if (event.target.id === "chatPickerSearch") {
+    state.chatSearchComposing = true;
+  }
+});
+
+document.addEventListener("compositionend", (event) => {
+  if (event.target.id === "chatPickerSearch") {
+    state.chatSearchComposing = false;
+    state.chatSearch = event.target.value;
+    renderChatPickerModal();
   }
 });
 

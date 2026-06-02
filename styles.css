@@ -1801,6 +1801,17 @@ h3 {
   max-width: 100%;
 }
 
+.role-binding-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.chat-binding-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .project-group-card {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2155,6 +2166,10 @@ button:disabled {
   .binding-row.project-chat-row {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .chat-binding-grid {
+    grid-template-columns: 1fr;
   }
 }
 
