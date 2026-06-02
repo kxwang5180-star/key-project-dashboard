@@ -120,7 +120,12 @@ authRouter.get("/feishu/callback", async (req, res) => {
     const payload = verifyToken(String(state));
     if (payload?.purpose !== "feishu_oauth_state") throw new Error("Invalid state");
     redirectPath = getSafeRedirectPath(payload.redirectPath);
-  } catch {
+  } catch (error) {
+    console.warn("[feishu-auth] invalid oauth state", {
+      message: error.message,
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+    });
     return res.status(400).send("飞书授权状态校验失败，请重新登录");
   }
 
@@ -170,6 +175,13 @@ authRouter.get("/feishu/callback", async (req, res) => {
     res.setHeader("Set-Cookie", buildAuthCookie(appToken));
     res.redirect(302, redirectPath);
   } catch (error) {
+    console.error("[feishu-auth] callback failed", {
+      message: error.message,
+      redirectUri: config.feishu.redirectUri,
+      scopes: config.feishu.scopes,
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+    });
     res.status(401).send(`飞书登录处理失败：${error.message}`);
   }
 });

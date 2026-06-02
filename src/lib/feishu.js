@@ -11,6 +11,12 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function formatFeishuError(data, fallbackMessage) {
+  const code = data?.code ?? data?.error ?? "";
+  const message = data?.message || data?.msg || data?.error_description || fallbackMessage;
+  return code ? `${message}（飞书错误码：${code}）` : message;
+}
+
 export function buildFeishuAuthorizeUrl(stateValue) {
   const url = new URL(config.feishu.authorizeUrl);
   url.searchParams.set("client_id", config.feishu.appId);
@@ -37,7 +43,7 @@ export async function exchangeFeishuCode(code) {
 
   const data = await response.json();
   if (!response.ok || data.code !== 0 || !data.access_token) {
-    throw new Error(data.message || data.msg || "Failed to exchange Feishu authorization code");
+    throw new Error(formatFeishuError(data, "Failed to exchange Feishu authorization code"));
   }
   return data;
 }
@@ -58,7 +64,7 @@ export async function refreshFeishuUserAccessToken(refreshToken) {
 
   const data = await response.json();
   if (!response.ok || data.code !== 0 || !data.access_token) {
-    throw new Error(data.message || data.msg || "Failed to refresh Feishu user access token");
+    throw new Error(formatFeishuError(data, "Failed to refresh Feishu user access token"));
   }
   return data;
 }
@@ -71,7 +77,7 @@ export async function fetchFeishuUserInfo(userAccessToken) {
   });
   const data = await response.json();
   if (!response.ok || data.code !== 0 || !data.data) {
-    throw new Error(data.message || data.msg || "Failed to fetch Feishu user info");
+    throw new Error(formatFeishuError(data, "Failed to fetch Feishu user info"));
   }
   return data.data;
 }
@@ -105,7 +111,7 @@ export async function fetchFeishuUserChats(userAccessToken, options = {}) {
 async function parseFeishuResponse(response, fallbackMessage) {
   const data = await response.json();
   if (!response.ok || data.code !== 0) {
-    throw new Error(data.message || data.msg || fallbackMessage);
+    throw new Error(formatFeishuError(data, fallbackMessage));
   }
   return data;
 }
