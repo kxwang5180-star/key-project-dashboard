@@ -67,7 +67,7 @@ ADMIN_PASSWORD="你的管理员初始密码"
 FEISHU_APP_ID="cli_xxx"
 FEISHU_APP_SECRET="xxx"
 FEISHU_REDIRECT_URI="https://your-domain.com/api/auth/feishu/callback"
-FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read"
+FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read"
 COOKIE_SECURE="true"
 ```
 
@@ -204,8 +204,8 @@ http://172.20.185.141/api/auth/feishu/callback
 4. 在权限管理中申请至少这些权限：
    - `contact:user.base:readonly`
    - `auth:user.id:read`
-   - `im:chat:readonly`（读取当前授权用户所在群聊时需要）
-   - `im:chat.member:readonly`（读取群成员时需要）
+   - `im:chat:read`（读取当前授权用户所在群聊时需要）
+   - `im:chat.members:read`（读取群成员时需要）
 
 ### 环境变量
 
@@ -215,7 +215,7 @@ http://172.20.185.141/api/auth/feishu/callback
 FEISHU_APP_ID="cli_xxx"
 FEISHU_APP_SECRET="xxx"
 FEISHU_REDIRECT_URI="https://your-domain.com/api/auth/feishu/callback"
-FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:readonly im:chat.member:readonly"
+FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read"
 FEISHU_CHAT_ID="oc_xxx"
 ```
 
@@ -223,7 +223,7 @@ FEISHU_CHAT_ID="oc_xxx"
 
 如果要通过开放平台读取某个飞书群的成员姓名，需要先确认：
 
-1. 应用已获得 `im:chat.member:readonly` 和 `contact:user.base:readonly` 权限，并完成管理员审批。
+1. 应用已获得 `im:chat.members:read` 和 `contact:user.base:readonly` 权限，并完成管理员审批。
 2. 应用机器人已加入目标群，或应用具备读取该群成员的权限。
 3. 已拿到目标群的 `chat_id`。
 
@@ -267,14 +267,14 @@ npm run feishu:chat-members -- --json
 
 - `同步我的飞书群聊` 获取的是当前授权用户加入的群聊，不是企业内全部群聊。
 - 如果飞书用户授权过期，需要重新飞书登录后再同步。
-- 需要应用权限包含 `im:chat:readonly`、`im:chat.member:readonly`、`contact:user.base:readonly`。
+- 需要应用权限包含 `im:chat:read`、`im:chat.members:read`、`contact:user.base:readonly`。
 
 ### 当前权限策略
 
 这版代码先采用“飞书认证 + 本系统角色映射”的方式：
 
 - 飞书只负责确认用户身份
-- 系统角色通过邮箱映射
+- 系统角色优先通过邮箱映射，也支持飞书 `open_id`、`union_id`、`user_id` 映射，避免飞书未返回邮箱时无法识别管理员
 
 可用环境变量：
 
@@ -282,6 +282,9 @@ npm run feishu:chat-members -- --json
 FEISHU_ALLOW_ALL_USERS="true"
 FEISHU_ALLOWED_EMAILS="a@example.com,b@example.com"
 FEISHU_ADMIN_EMAILS="admin@example.com"
+FEISHU_ADMIN_OPEN_IDS="ou_xxx"
+FEISHU_ADMIN_UNION_IDS="on_xxx"
+FEISHU_ADMIN_USER_IDS="user_xxx"
 ```
 
 如果后续你要按飞书部门自动分配权限，再接通讯录接口即可。

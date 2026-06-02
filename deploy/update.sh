@@ -21,7 +21,7 @@ echo "[5/6] Syncing database schema"
 npx prisma db push
 
 echo "[6/6] Reloading PM2 process"
-pm2 reload "$PM2_APP_NAME"
+pm2 reload "$PM2_APP_NAME" --update-env
 
 echo "Running health check"
 curl -fsS "$HEALTHCHECK_URL"

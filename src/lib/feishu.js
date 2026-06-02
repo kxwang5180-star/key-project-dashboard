@@ -204,6 +204,9 @@ export async function fetchFeishuChatMemberNames(chatId, options = {}) {
 export function mapRoleFromFeishuUser(userInfo) {
   const email = normalizeEmail(userInfo.email);
   if (config.feishu.adminEmails.includes(email)) return UserRole.ADMIN;
+  if (userInfo.open_id && config.feishu.adminOpenIds.includes(userInfo.open_id)) return UserRole.ADMIN;
+  if (userInfo.union_id && config.feishu.adminUnionIds.includes(userInfo.union_id)) return UserRole.ADMIN;
+  if (userInfo.user_id && config.feishu.adminUserIds.includes(userInfo.user_id)) return UserRole.ADMIN;
   return UserRole.MEMBER;
 }
 

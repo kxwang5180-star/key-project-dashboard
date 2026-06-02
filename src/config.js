@@ -8,6 +8,13 @@ function required(key, fallback) {
   return value;
 }
 
+function splitEnvList(value) {
+  return String(value || "")
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   jwtSecret: required("JWT_SECRET"),
@@ -34,17 +41,14 @@ export const config = {
     defaultChatId: process.env.FEISHU_CHAT_ID || "",
     postLoginRedirect: process.env.FEISHU_POST_LOGIN_REDIRECT || "/",
     allowAllUsers: String(process.env.FEISHU_ALLOW_ALL_USERS || "true").toLowerCase() === "true",
-    scopes: String(process.env.FEISHU_SCOPES || "contact:user.base:readonly auth:user.id:read")
+    scopes: String(process.env.FEISHU_SCOPES || "contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read")
       .split(/[\s,]+/)
       .map((item) => item.trim())
       .filter(Boolean),
-    allowedEmails: String(process.env.FEISHU_ALLOWED_EMAILS || "")
-      .split(/[,\s]+/)
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-    adminEmails: String(process.env.FEISHU_ADMIN_EMAILS || "")
-      .split(/[,\s]+/)
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
+    allowedEmails: splitEnvList(process.env.FEISHU_ALLOWED_EMAILS).map((item) => item.toLowerCase()),
+    adminEmails: splitEnvList(process.env.FEISHU_ADMIN_EMAILS).map((item) => item.toLowerCase()),
+    adminOpenIds: splitEnvList(process.env.FEISHU_ADMIN_OPEN_IDS),
+    adminUnionIds: splitEnvList(process.env.FEISHU_ADMIN_UNION_IDS),
+    adminUserIds: splitEnvList(process.env.FEISHU_ADMIN_USER_IDS),
   },
 };
