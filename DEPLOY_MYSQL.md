@@ -76,13 +76,14 @@ COOKIE_SECURE="true"
 ```bash
 npm install
 npm run prisma:generate
-npm run prisma:migrate
+npx prisma db push
 npm run seed
 ```
 
 说明：
-- `prisma:migrate` 会按 `prisma/schema.prisma` 建表
+- `prisma db push` 会按 `prisma/schema.prisma` 同步当前表结构
 - `seed` 会把当前 [data.js](/Users/kk/Documents/Codex/2026-05-27/ai-ai-ai/data.js) 的项目数据导入 MySQL
+- 当前这套 RDS 权限模型不适合在服务器上直接使用 `prisma migrate dev`
 
 ## 7. 启动服务
 
@@ -233,12 +234,33 @@ FEISHU_ADMIN_EMAILS="admin@example.com"
 4. 写 .env
 5. npm install
 6. npm run prisma:generate
-7. npm run prisma:migrate
+7. npx prisma db push
 8. npm run seed
 9. pm2 start ecosystem.config.cjs
 10. 配 Nginx
 11. 配 HTTPS
 ```
+
+## 16. 日常更新
+
+本地提交并推送：
+
+```bash
+git add .
+git commit -m "feat: 描述本次改动"
+git push origin main
+```
+
+服务器更新：
+
+```bash
+cd /srv/key-project-dashboard
+chmod +x deploy/update.sh
+./deploy/update.sh
+```
+
+脚本文件：  
+[deploy/update.sh](/Users/kk/Documents/Codex/2026-05-27/ai-ai-ai/deploy/update.sh)
 
 ## 14. 还需要继续做的两步
 
