@@ -2620,7 +2620,7 @@ document.addEventListener("click", (event) => {
 
   const feishuLoginButton = event.target.closest("[data-feishu-login]");
   if (feishuLoginButton) {
-    window.location.href = "/api/auth/feishu/login?redirect=" + encodeURIComponent("/#register");
+    window.location.href = "/api/auth/feishu/login?redirect=" + encodeURIComponent("/");
     return;
   }
 
