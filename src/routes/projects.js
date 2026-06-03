@@ -143,7 +143,7 @@ projectRouter.put("/:id/milestones", asyncRoute(async (req, res) => {
           title: String(milestone.title || `里程碑 ${index + 1}`).trim(),
           source: String(milestone.source || "项目维护").trim(),
           rawText: String(milestone.rawText || milestone.raw || "").trim() || null,
-          dueDate: milestone.dueDate ? new Date(milestone.dueDate) : milestone.dateKey ? new Date(milestone.dateKey) : null,
+          dueDate: milestone.dueDate ? new Date(milestone.dueDate) : milestone.dateKey ? new Date(`${milestone.dateKey}T00:00:00.000Z`) : null,
           status: normalizeProjectMilestoneStatus(milestone.status),
           sortOrder: index,
           changeSummary: String(milestone.changeSummary || milestone.changeNote || "").trim() || null,

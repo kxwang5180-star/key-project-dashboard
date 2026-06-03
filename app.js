@@ -600,13 +600,13 @@ function inferMilestoneStatus(line, dateInfo) {
   const text = String(line || "");
   if (/调整|变更|延期|推迟/.test(text)) return "changed";
   const looksCompleted = /已完成|已上线|已发布|已确认|评审完成|交付完成|封版上线/.test(text);
-  if (looksCompleted && (!dateInfo || dateInfo.date <= TODAY)) return "done";
-  if (/开发|测试|试点|持续|进行|联调|排期中/.test(text) && dateInfo && dateInfo.date <= TODAY) return "doing";
+  if (looksCompleted && (!dateInfo || dateInfo.date <= TODAY)) return "completed";
+  if (/开发|测试|试点|持续|进行|联调|排期中/.test(text) && dateInfo && dateInfo.date <= TODAY) return "in-progress";
   if (!dateInfo) return "planned";
 
   const diffDays = (dateInfo.date - TODAY) / 86400000;
-  if (diffDays < 0) return "risk";
-  if (diffDays <= 7) return "due";
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 7) return "upcoming";
   return "planned";
 }
 
@@ -847,7 +847,7 @@ function normalizeMilestone(project, milestone, index = 0) {
     raw: milestone.raw || title,
     source: milestone.source || "项目维护",
     dateInfo,
-    status: milestone.status || inferMilestoneStatus(title, dateInfo),
+    status: migrateMilestoneStatus(milestone.status || inferMilestoneStatus(title, dateInfo)),
     changeNote: String(milestone.changeNote || "").trim(),
   };
 }
