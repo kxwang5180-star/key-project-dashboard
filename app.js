@@ -884,9 +884,10 @@ function serializeMilestone(milestone) {
 }
 
 function normalizeMilestone(project, milestone, index = 0) {
-  const rawParts = milestone.dateKey ? milestone.dateKey.split("-").map(Number) : [];
+  const milestoneDateKey = String(milestone.dateKey || milestone.dateInfo?.key || "").trim();
+  const rawParts = milestoneDateKey ? milestoneDateKey.split("-").map(Number) : [];
   const dateInfo = rawParts.length === 3 && rawParts.every((n) => !Number.isNaN(n))
-    ? parseDateFromText(milestone.dateKey) || makeDateInfo(...rawParts)
+    ? parseDateFromText(milestoneDateKey) || makeDateInfo(...rawParts)
     : null;
   const title = String(milestone.title || "").trim() || "未命名里程碑";
   return {
@@ -1147,6 +1148,13 @@ function refreshMilestoneMaintenanceViews({ renderRail = true, syncFields = true
   renderGovernance();
   renderReportStatusPanel();
   renderSummary();
+}
+
+function preserveScrollPosition(callback) {
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+  callback();
+  requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
 }
 
 function ensureMilestoneDraft(project) {
@@ -3481,7 +3489,7 @@ document.addEventListener("click", async (event) => {
     if (!state.milestoneManageMode) ensureMilestoneDraft(project);
     else resetMilestoneDraft(project.id);
     state.milestoneManageMode = !state.milestoneManageMode;
-    renderReportMilestoneRail();
+    preserveScrollPosition(() => renderReportMilestoneRail());
     return;
   }
 

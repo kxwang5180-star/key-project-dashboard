@@ -6,8 +6,11 @@ export function updateMetricDraftField(metrics, { metricId, field, value }) {
 
 export function updateMilestoneDraftField(milestones, { milestoneId, field, value }) {
   return (Array.isArray(milestones) ? milestones : []).map((milestone) => {
-    if (milestone.id !== milestoneId) return milestone;
-    const next = { ...milestone, [field]: value };
+    const base = { ...milestone };
+    const dateKey = String(milestone.dateKey || milestone.dateInfo?.key || "").trim();
+    if (dateKey) base.dateKey = dateKey;
+    if (milestone.id !== milestoneId) return base;
+    const next = { ...base, [field]: value };
     if (field === "title") next.raw = value;
     return next;
   });

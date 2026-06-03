@@ -34,6 +34,26 @@ test("updateMilestoneDraftField keeps raw title in sync", () => {
   );
 });
 
+test("updateMilestoneDraftField preserves date keys for untouched milestones", () => {
+  assert.deepEqual(
+    updateMilestoneDraftField(
+      [
+        { id: "ms1", title: "节点一", dateInfo: { key: "2026-06-01" } },
+        { id: "ms2", title: "节点二", dateInfo: { key: "2026-06-15" } },
+      ],
+      {
+        milestoneId: "ms1",
+        field: "dateKey",
+        value: "2026-06-08",
+      }
+    ),
+    [
+      { id: "ms1", title: "节点一", dateInfo: { key: "2026-06-01" }, dateKey: "2026-06-08" },
+      { id: "ms2", title: "节点二", dateInfo: { key: "2026-06-15" }, dateKey: "2026-06-15" },
+    ]
+  );
+});
+
 test("buildFocusedMilestonePatch maps focused editor date and status", () => {
   assert.deepEqual(
     buildFocusedMilestonePatch({
