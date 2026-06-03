@@ -6,7 +6,9 @@ import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canManageIdentity } from "../lib/auth.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
-import { normalizeProjectMilestoneStatus, toPublicProjectBrief, toPublicProjectMaintenanceState } from "../services/project-records.js";
+import { buildProjectMetricCreateData, normalizeProjectMilestoneStatus, toPublicProjectBrief, toPublicProjectMaintenanceState } from "../services/project-records.js";
+import { writeAuditLog } from "../services/audit-log.js";
+import { buildProjectChatAuditDetail } from "../services/audit-log-records.js";
 
 export const projectRouter = Router();
 
@@ -51,6 +53,13 @@ projectRouter.put("/:id/chat", requireRoles("ADMIN"), asyncRoute(async (req, res
       feishuChatId: true,
     },
   });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "project.chat.bind",
+    targetType: "Project",
+    targetId: req.params.id,
+    detail: buildProjectChatAuditDetail({ chatId }),
+  });
   res.json({ project });
 }));
 
@@ -69,6 +78,13 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
 
   const members = await syncProjectMembersFromFeishuChat(req.params.id, chatId, {
     userId: req.user.id,
+  });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "project.chat.members.sync",
+    targetType: "Project",
+    targetId: req.params.id,
+    detail: buildProjectChatAuditDetail({ chatId, memberCount: members.length }),
   });
   res.json({
     ok: true,
@@ -95,6 +111,17 @@ projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
       changeSummary: changeSummary ?? undefined,
     },
   });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "project.brief.update",
+    targetType: "Project",
+    targetId: req.params.id,
+    detail: {
+      ownerName: ownerName ?? null,
+      hasDescription: description !== undefined,
+      stage: stage || null,
+    },
+  });
   res.json({ brief: toPublicProjectBrief(project) });
 }));
 
@@ -106,22 +133,30 @@ projectRouter.put("/:id/metrics", asyncRoute(async (req, res) => {
   const projectState = await prisma.$transaction(async (tx) => {
     await tx.metric.deleteMany({ where: { projectId: req.params.id } });
     if (metrics.length) {
-      await tx.metric.createMany({
-        data: metrics.map((metric, index) => ({
-          projectId: req.params.id,
-          name: String(metric.name || `指标 ${index + 1}`).trim(),
-          currentValue: String(metric.currentValue || metric.current || "").trim() || null,
-          targetValue: String(metric.targetValue || metric.target || "").trim() || null,
-          observation: String(metric.observation || "").trim() || null,
-          chartType: String(metric.chartType || "").trim() || null,
-          sortOrder: index,
-        })),
-      });
+      for (const [index, metric] of metrics.entries()) {
+        await tx.metric.create({
+          data: buildProjectMetricCreateData(metric, { projectId: req.params.id, index }),
+        });
+      }
     }
+    await writeAuditLog({
+      client: tx,
+      userId: req.user.id,
+      action: "project.metrics.update",
+      targetType: "Project",
+      targetId: req.params.id,
+      detail: {
+        metricCount: metrics.length,
+        historyRecordCount: metrics.reduce((sum, metric) => sum + (Array.isArray(metric.history) ? metric.history.length : 0), 0),
+      },
+    });
     return tx.project.findUnique({
       where: { id: req.params.id },
       include: {
-        metrics: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+        metrics: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          include: { records: { orderBy: { recordDate: "asc" } } },
+        },
         milestones: { orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }] },
       },
     });
@@ -150,10 +185,23 @@ projectRouter.put("/:id/milestones", asyncRoute(async (req, res) => {
         })),
       });
     }
+    await writeAuditLog({
+      client: tx,
+      userId: req.user.id,
+      action: "project.milestones.update",
+      targetType: "Project",
+      targetId: req.params.id,
+      detail: {
+        milestoneCount: milestones.length,
+      },
+    });
     return tx.project.findUnique({
       where: { id: req.params.id },
       include: {
-        metrics: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+        metrics: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          include: { records: { orderBy: { recordDate: "asc" } } },
+        },
         milestones: { orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }] },
       },
     });

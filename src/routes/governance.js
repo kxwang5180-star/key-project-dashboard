@@ -5,6 +5,8 @@ import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { getAllowedProjectIdsForUser } from "../services/project-members.js";
 import { normalizeGovernanceStatus } from "../services/governance-records.js";
+import { writeAuditLog } from "../services/audit-log.js";
+import { buildGovernanceAuditDetail } from "../services/audit-log-records.js";
 
 export const governanceRouter = Router();
 
@@ -35,6 +37,13 @@ governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) =>
       ownerName: ownerName ? String(ownerName).trim() : null,
     },
   });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "governance.task.create",
+    targetType: "GovernanceTask",
+    targetId: task.id,
+    detail: buildGovernanceAuditDetail({ status: task.status, ownerName: task.ownerName }),
+  });
   res.status(201).json(task);
 }));
 
@@ -46,6 +55,13 @@ governanceRouter.put("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) 
       status: status ? normalizeGovernanceStatus(status) : undefined,
       ownerName: ownerName !== undefined ? String(ownerName || "").trim() || null : undefined,
     },
+  });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "governance.task.update",
+    targetType: "GovernanceTask",
+    targetId: task.id,
+    detail: buildGovernanceAuditDetail({ status: status ?? null, ownerName: ownerName ?? null }),
   });
   res.json(task);
 }));

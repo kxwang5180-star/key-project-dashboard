@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyProjectBriefSnapshot,
+  buildProjectMetricCreateData,
   buildProjectBriefUpdatePayload,
   normalizeProjectMilestoneStatus,
   toPublicProjectMaintenanceState,
@@ -77,6 +78,12 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
           targetValue: "95%",
           observation: "按月复盘",
           chartType: "ring",
+          records: [
+            {
+              recordDate: new Date("2026-06-01T00:00:00.000Z"),
+              value: "70%",
+            },
+          ],
         },
       ],
       milestones: [
@@ -101,6 +108,7 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
           target: "95%",
           observation: "按月复盘",
           chartType: "ring",
+          history: [{ date: "2026-06-01", value: "70%" }],
         },
       ],
       milestones: [
@@ -114,6 +122,42 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
           changeNote: "日期调整",
         },
       ],
+    }
+  );
+});
+
+test("buildProjectMetricCreateData preserves client metric ids and history records", () => {
+  assert.deepEqual(
+    buildProjectMetricCreateData(
+      {
+        id: "metric_1",
+        name: "预算执行",
+        currentValue: "80%",
+        targetValue: "95%",
+        observation: "按月复盘",
+        chartType: "ring",
+        history: [
+          { date: "2026-06-01", value: "70%" },
+          { date: "bad-date", value: "应忽略" },
+          { date: "2026-06-02", value: "" },
+        ],
+      },
+      { projectId: "project_1", index: 2 }
+    ),
+    {
+      id: "metric_1",
+      projectId: "project_1",
+      name: "预算执行",
+      currentValue: "80%",
+      targetValue: "95%",
+      observation: "按月复盘",
+      chartType: "ring",
+      sortOrder: 2,
+      records: {
+        createMany: {
+          data: [{ recordDate: new Date("2026-06-01T00:00:00.000Z"), value: "70%" }],
+        },
+      },
     }
   );
 });

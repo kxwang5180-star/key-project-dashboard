@@ -16,6 +16,8 @@ import {
 import { ensureUserProjectMembershipLinks, getAllowedProjectIdsForUser } from "../services/project-members.js";
 import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/feishu-chat-sync.js";
 import { toPublicUser } from "../services/public-user.js";
+import { writeAuditLog } from "../services/audit-log.js";
+import { buildUserRoleAuditDetail } from "../services/audit-log-records.js";
 
 export const authRouter = Router();
 
@@ -295,6 +297,13 @@ authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), asyncRoute(asy
       feishuOpenId: true,
       feishuUnionId: true,
     },
+  });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "identity.user.update",
+    targetType: "User",
+    targetId: req.params.id,
+    detail: buildUserRoleAuditDetail({ role: nextRole, defaultProjectId }),
   });
   res.json({
     user: toPublicUser(user, await getAllowedProjectIdsForUser(user), { canManageIdentity }),

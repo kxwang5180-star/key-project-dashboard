@@ -444,6 +444,7 @@ async function saveProjectMetrics(project) {
     targetValue: metric.target,
     observation: metric.observation,
     chartType: metric.chartType,
+    history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
   }));
   return apiRequest(`/api/projects/${project.id}/metrics`, {
     method: "PUT",
@@ -975,6 +976,7 @@ function setProjectMetricItems(project, metrics) {
     current: String(metric.current || "").trim(),
     target: String(metric.target || "").trim(),
     observation: String(metric.observation || "").trim(),
+    chartType: String(metric.chartType || "").trim(),
     history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
   }));
   persistProjectMaintenance();

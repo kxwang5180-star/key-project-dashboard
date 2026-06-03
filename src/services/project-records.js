@@ -33,6 +33,13 @@ function formatDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function parseMetricRecordDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function toFrontendMilestoneStatus(status) {
   const value = String(status || "").toUpperCase();
   const statusMap = {
@@ -71,6 +78,40 @@ export function normalizeProjectMilestoneStatus(status) {
     : "PLANNED");
 }
 
+export function buildProjectMetricCreateData(metric, { projectId, index = 0 }) {
+  const history = Array.isArray(metric?.history) ? metric.history : [];
+  const records = history
+    .map((item) => ({
+      recordDate: parseMetricRecordDate(item.date),
+      value: String(item.value || "").trim(),
+    }))
+    .filter((item) => item.recordDate && item.value)
+    .slice(-8);
+
+  const metricId = String(metric?.id || "").trim();
+  const data = {
+    projectId,
+    name: String(metric?.name || `指标 ${index + 1}`).trim(),
+    currentValue: String(metric?.currentValue || metric?.current || "").trim() || null,
+    targetValue: String(metric?.targetValue || metric?.target || "").trim() || null,
+    observation: String(metric?.observation || "").trim() || null,
+    chartType: String(metric?.chartType || "").trim() || null,
+    sortOrder: index,
+  };
+
+  if (metricId) data.id = metricId;
+
+  if (records.length) {
+    data.records = {
+      createMany: {
+        data: records,
+      },
+    };
+  }
+
+  return data;
+}
+
 export function toPublicProjectMaintenanceState(project) {
   return {
     projectId: project.id,
@@ -81,6 +122,10 @@ export function toPublicProjectMaintenanceState(project) {
       target: metric.targetValue || "",
       observation: metric.observation || "",
       chartType: metric.chartType || "",
+      history: (metric.records || []).map((record) => ({
+        date: formatDateKey(record.recordDate),
+        value: record.value || "",
+      })),
     })),
     milestones: (project.milestones || []).map((milestone) => ({
       id: milestone.id,
