@@ -1,6 +1,16 @@
 import { mergeChatMembers, renderChatMemberChips } from "./src/ui/chat-members.js";
 import { chooseEffectiveProjectId } from "./src/lib/project-access.js";
 import { applyProjectBriefSnapshot, buildProjectBriefUpdatePayload } from "./src/services/project-records.js";
+import {
+  buildGovernanceItemKey,
+  normalizeGovernanceStatus,
+  toClientGovernanceResolution,
+} from "./src/services/governance-records.js";
+import {
+  buildFocusedMilestonePatch,
+  updateMetricDraftField,
+  updateMilestoneDraftField,
+} from "./src/ui/maintenance-drafts.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -71,6 +81,7 @@ function migrateMilestoneStatus(status) {
 }
 let memberProfile = null;
 let submissions = [];
+let governanceTasks = [];
 const authState = {
   loading: true,
   error: "",
@@ -296,6 +307,7 @@ async function loadCurrentUser() {
     if (memberProfile) {
       await loadProjectChatBindings();
       await loadWeeklyReports();
+      if (memberProfile.isAdmin) await loadGovernanceTasks();
     }
     if (memberProfile?.canManageIdentity) {
       await loadFeishuChats();
@@ -426,6 +438,52 @@ async function loadWeeklyReports() {
   submissions = Array.isArray(payload.reports) ? payload.reports : [];
 }
 
+async function loadGovernanceTasks() {
+  if (!memberProfile?.isAdmin) {
+    governanceTasks = [];
+    return;
+  }
+  const payload = await apiRequest("/api/governance");
+  governanceTasks = Array.isArray(payload) ? payload : [];
+}
+
+function upsertGovernanceTask(task) {
+  governanceTasks = [
+    task,
+    ...governanceTasks.filter((item) => item.id !== task.id && buildGovernanceItemKey(item) !== buildGovernanceItemKey(task)),
+  ];
+}
+
+async function saveGovernanceResolution(itemKey, patch) {
+  const item = getGovernanceItems().find((candidate) => candidate.itemKey === itemKey);
+  if (!item) return null;
+  const existingTask = governanceTasks.find((task) => buildGovernanceItemKey(task) === itemKey);
+  const currentResolution = getGovernanceResolution(item);
+  const payload = {
+    projectId: item.project.id,
+    taskType: item.type,
+    title: item.title,
+    detail: item.detail,
+    level: String(item.level || "medium").toUpperCase(),
+    status: normalizeGovernanceStatus(patch.status || currentResolution.status),
+    ownerName: patch.owner !== undefined ? patch.owner : currentResolution.owner,
+  };
+  const task = existingTask
+    ? await apiRequest(`/api/governance/${existingTask.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: payload.status,
+          ownerName: payload.ownerName,
+        }),
+      })
+    : await apiRequest("/api/governance", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+  upsertGovernanceTask(task);
+  return task;
+}
+
 async function saveWeeklyReport(report) {
   const payload = await apiRequest("/api/reports", {
     method: "POST",
@@ -452,6 +510,17 @@ function applyProjectReportState(projectState) {
   if (!projectState?.projectId) return;
   const project = projects.find((item) => item.id === projectState.projectId);
   if (!project) return;
+  if (Array.isArray(projectState.metrics)) {
+    getProjectMaintenance(project.id).metrics = projectState.metrics.map((metric, index) => ({
+      id: metric.id || uid(`${project.id}-metric`),
+      name: String(metric.name || `指标 ${index + 1}`).trim(),
+      current: String(metric.current || "").trim(),
+      target: String(metric.target || "").trim(),
+      observation: String(metric.observation || "").trim(),
+      chartType: String(metric.chartType || "").trim(),
+      history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
+    }));
+  }
   if (Array.isArray(projectState.milestones)) {
     project.milestones = projectState.milestones.map((milestone, index) => normalizeMilestone(project, milestone, index));
     getProjectMaintenance(project.id).milestones = project.milestones.map(serializeMilestone);
@@ -973,6 +1042,44 @@ function cloneMilestoneDraft(project) {
   }));
 }
 
+function updateMetricDraftFromField(metricField) {
+  const project = getReportProject();
+  draftStore.metrics[project.id] = updateMetricDraftField(ensureMetricDraft(project), {
+    metricId: metricField.dataset.metricId,
+    field: metricField.dataset.metricField,
+    value: metricField.value,
+  });
+}
+
+function updateMilestoneDraftFromField(milestoneField) {
+  const project = getReportProject();
+  const updated = updateMilestoneDraftField(ensureMilestoneDraft(project), {
+    milestoneId: milestoneField.dataset.milestoneId,
+    field: milestoneField.dataset.milestoneField,
+    value: milestoneField.value,
+  }).map((milestone, index) => normalizeMilestone(project, milestone, index));
+  draftStore.milestones[project.id] = updated;
+}
+
+function updateFocusedMilestoneFromForm() {
+  const form = document.querySelector("#memberReportForm");
+  const project = getReportProject();
+  const milestone = getReportMilestone(project);
+  if (!form || !project || !milestone) return;
+  const patch = buildFocusedMilestonePatch(
+    {
+      title: form.elements.milestoneTitle.value,
+      dateKey: form.elements.milestoneDate.value,
+      status: form.elements.milestoneStatus.value,
+    },
+    serializeMilestone(milestone)
+  );
+  project.milestones = getReportMilestones(project).map((item, index) =>
+    item.id === milestone.id ? normalizeMilestone(project, { ...serializeMilestone(item), ...patch }, index) : item
+  );
+  refreshProjectDerived(project);
+}
+
 function ensureMilestoneDraft(project) {
   if (!draftStore.milestones[project.id]) draftStore.milestones[project.id] = cloneMilestoneDraft(project);
   return draftStore.milestones[project.id];
@@ -1008,11 +1115,14 @@ function getGovernanceStore() {
 }
 
 function getGovernanceItemKey(item) {
-  return `${item.project.id}|${item.type}|${item.title}|${item.detail}`;
+  return buildGovernanceItemKey(item);
 }
 
 function getGovernanceResolution(item) {
-  const saved = getGovernanceStore()[getGovernanceItemKey(item)] || {};
+  const itemKey = getGovernanceItemKey(item);
+  const task = governanceTasks.find((candidate) => buildGovernanceItemKey(candidate) === itemKey);
+  if (task) return toClientGovernanceResolution(task);
+  const saved = getGovernanceStore()[itemKey] || {};
   return {
     status: saved.status || "todo",
     owner: String(saved.owner || "").trim(),
@@ -3263,7 +3373,8 @@ document.addEventListener("click", async (event) => {
     state.saveNotice = "正在保存项目指标...";
     renderMemberWorkspace();
     saveProjectMetrics(project)
-      .then(() => {
+      .then((payload) => {
+        applyProjectReportState(payload?.projectState);
         state.saveNotice = "项目指标已保存。";
       })
       .catch((error) => {
@@ -3326,7 +3437,8 @@ document.addEventListener("click", async (event) => {
     state.saveNotice = "正在保存项目里程碑...";
     renderMemberWorkspace();
     saveProjectMilestones(project)
-      .then(() => {
+      .then((payload) => {
+        applyProjectReportState(payload?.projectState);
         state.saveNotice = "项目里程碑已保存。";
       })
       .catch((error) => {
@@ -3393,7 +3505,8 @@ document.addEventListener("click", async (event) => {
     state.saveNotice = "正在保存项目里程碑...";
     renderMemberWorkspace();
     saveProjectMilestones(project)
-      .then(() => {
+      .then((payload) => {
+        applyProjectReportState(payload?.projectState);
         state.saveNotice = "项目里程碑已保存。";
       })
       .catch((error) => {
@@ -3489,26 +3602,13 @@ document.addEventListener("click", async (event) => {
 document.addEventListener("change", (event) => {
   const metricField = event.target.closest("[data-metric-field]");
   if (metricField) {
-    const project = getReportProject();
-    const metrics = ensureMetricDraft(project).map((metric) =>
-      metric.id === metricField.dataset.metricId
-        ? { ...metric, [metricField.dataset.metricField]: metricField.value }
-        : metric
-    );
-    draftStore.metrics[project.id] = metrics;
+    updateMetricDraftFromField(metricField);
     return;
   }
 
   const milestoneField = event.target.closest("[data-milestone-field]");
   if (milestoneField) {
-    const project = getReportProject();
-    const milestones = ensureMilestoneDraft(project).map((milestone) => {
-      if (milestone.id !== milestoneField.dataset.milestoneId) return milestone;
-      const next = { ...milestone, [milestoneField.dataset.milestoneField]: milestoneField.value };
-      if (milestoneField.dataset.milestoneField === "title") next.raw = milestoneField.value;
-      return normalizeMilestone(project, next);
-    });
-    draftStore.milestones[project.id] = milestones;
+    updateMilestoneDraftFromField(milestoneField);
     return;
   }
 
@@ -3525,14 +3625,30 @@ document.addEventListener("change", (event) => {
 
   const governanceField = event.target.closest("[data-governance-field]");
   if (governanceField) {
-    setGovernanceResolution(governanceField.dataset.governanceKey, {
+    const patch = {
       [governanceField.dataset.governanceField]: governanceField.value,
-    });
+    };
+    setGovernanceResolution(governanceField.dataset.governanceKey, patch);
     renderGovernance();
+    saveGovernanceResolution(governanceField.dataset.governanceKey, patch)
+      .then(() => {
+        renderGovernance();
+      })
+      .catch((error) => {
+        state.saveNotice = error.message;
+        renderGovernance();
+      });
     return;
   }
 
-  if (event.target.matches("input[name='milestoneDate'], select[name='milestoneStatus']")) state.saveNotice = "";
+  if (event.target.matches("input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']")) {
+    updateFocusedMilestoneFromForm();
+    state.saveNotice = "";
+    renderReportMilestoneRail();
+    renderWeekTimeline();
+    renderReportProjectBrief();
+    renderReportStatusPanel();
+  }
 
   if (event.target.id === "businessLineFilter") {
     state.businessLine = event.target.value;
@@ -3571,16 +3687,15 @@ document.addEventListener("input", (event) => {
     renderChatPickerModal();
   }
 
+  const metricField = event.target.closest("[data-metric-field]");
+  if (metricField) {
+    updateMetricDraftFromField(metricField);
+    return;
+  }
+
   const milestoneField = event.target.closest("[data-milestone-field]");
   if (milestoneField) {
-    const project = getReportProject();
-    const milestones = ensureMilestoneDraft(project).map((milestone) => {
-      if (milestone.id !== milestoneField.dataset.milestoneId) return milestone;
-      const next = { ...milestone, [milestoneField.dataset.milestoneField]: milestoneField.value };
-      if (milestoneField.dataset.milestoneField === "title") next.raw = milestoneField.value;
-      return normalizeMilestone(project, next);
-    });
-    draftStore.milestones[project.id] = milestones;
+    updateMilestoneDraftFromField(milestoneField);
     return;
   }
 });
@@ -3607,6 +3722,13 @@ memberReportForm.addEventListener("input", (event) => {
       "textarea[name='progress'], textarea[name='risk'], input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']"
     )
   ) {
+    if (event.target.matches("input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']")) {
+      updateFocusedMilestoneFromForm();
+      renderReportMilestoneRail();
+      renderWeekTimeline();
+      renderReportProjectBrief();
+      renderReportStatusPanel();
+    }
     state.saveNotice = "";
   }
 });

@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { getAllowedProjectIdsForUser } from "../services/project-members.js";
+import { normalizeGovernanceStatus } from "../services/governance-records.js";
 
 export const governanceRouter = Router();
 
@@ -19,7 +20,7 @@ governanceRouter.get("/", asyncRoute(async (req, res) => {
 }));
 
 governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
-  const { projectId, taskType, title, detail, level = GovernanceLevel.MEDIUM, ownerName = null } = req.body || {};
+  const { projectId, taskType, title, detail, level = GovernanceLevel.MEDIUM, status = GovernanceStatus.TODO, ownerName = null } = req.body || {};
   if (!projectId || !taskType || !title || !detail) {
     return res.status(400).json({ message: "项目、类型、标题、详情必填" });
   }
@@ -30,6 +31,7 @@ governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) =>
       title: String(title).trim(),
       detail: String(detail).trim(),
       level,
+      status: normalizeGovernanceStatus(status),
       ownerName: ownerName ? String(ownerName).trim() : null,
     },
   });
@@ -41,7 +43,7 @@ governanceRouter.put("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) 
   const task = await prisma.governanceTask.update({
     where: { id: req.params.id },
     data: {
-      status: status && Object.values(GovernanceStatus).includes(status) ? status : undefined,
+      status: status ? normalizeGovernanceStatus(status) : undefined,
       ownerName: ownerName !== undefined ? String(ownerName || "").trim() || null : undefined,
     },
   });
