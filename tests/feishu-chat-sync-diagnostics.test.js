@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildChatMemberCountUpdate, buildEmptyMemberSyncWarning } from "../src/services/feishu-chat-sync-diagnostics.js";
+import {
+  buildChatMemberCountUpdate,
+  buildChatMemberFetchAttempts,
+  buildEmptyMemberSyncWarning,
+} from "../src/services/feishu-chat-sync-diagnostics.js";
 
 test("buildEmptyMemberSyncWarning describes empty member responses with token source", () => {
   const warning = buildEmptyMemberSyncWarning({
@@ -39,5 +43,20 @@ test("buildChatMemberCountUpdate uses resolved count after member sync", () => {
       includeMembers: true,
     }),
     { memberCount: 3 }
+  );
+});
+
+test("buildChatMemberFetchAttempts tries user token before tenant token for selected chat member sync", () => {
+  assert.deepEqual(
+    buildChatMemberFetchAttempts({
+      userAccessToken: "user-token",
+      tenantAccessToken: "tenant-token",
+    }),
+    [
+      { token: "user-token", memberIdType: "open_id", label: "user:open_id" },
+      { token: "user-token", memberIdType: "user_id", label: "user:user_id" },
+      { token: "tenant-token", memberIdType: "open_id", label: "tenant:open_id" },
+      { token: "tenant-token", memberIdType: "user_id", label: "tenant:user_id" },
+    ]
   );
 });

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { comparePassword, hashPassword, signScopedToken, signToken, buildAuthCookie, buildExpiredAuthCookie, verifyToken } from "../lib/auth.js";
 import { asyncRoute } from "../lib/async-route.js";
+import { chooseEffectiveProjectId } from "../lib/project-access.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { config } from "../config.js";
 import {
@@ -45,7 +46,10 @@ function toPublicUser(user, allowedProjectIds = []) {
     role: user.role,
     roleKey: user.role,
     defaultProjectId: user.defaultProjectId,
-    projectId: user.defaultProjectId,
+    projectId: chooseEffectiveProjectId({
+      defaultProjectId: user.defaultProjectId,
+      allowedProjectIds,
+    }),
     projectIds: allowedProjectIds,
     avatarUrl: user.avatarUrl || null,
     feishuLinked: Boolean(user.feishuOpenId || user.feishuUnionId),

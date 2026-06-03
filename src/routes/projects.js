@@ -5,6 +5,7 @@ import { asyncRoute } from "../lib/async-route.js";
 import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
+import { toPublicProjectBrief } from "../services/project-records.js";
 
 export const projectRouter = Router();
 
@@ -35,6 +36,7 @@ projectRouter.get("/", asyncRoute(async (req, res) => {
       shortName: true,
       businessLine: true,
       ownerName: true,
+      description: true,
       feishuChatId: true,
       established: true,
       stage: true,
@@ -78,7 +80,9 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
   const chatId = String(req.body?.chatId || project.feishuChatId || "").trim();
   if (!chatId) return res.status(400).json({ message: "请先配置项目群 chat_id" });
 
-  const members = await syncProjectMembersFromFeishuChat(req.params.id, chatId);
+  const members = await syncProjectMembersFromFeishuChat(req.params.id, chatId, {
+    userId: req.user.id,
+  });
   res.json({
     ok: true,
     chatId,
@@ -104,7 +108,7 @@ projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
       changeSummary: changeSummary ?? undefined,
     },
   });
-  res.json(project);
+  res.json({ brief: toPublicProjectBrief(project) });
 }));
 
 projectRouter.put("/:id/metrics", asyncRoute(async (req, res) => {

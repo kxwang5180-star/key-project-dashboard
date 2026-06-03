@@ -1,20 +1,25 @@
 import { prisma } from "../lib/prisma.js";
-import { fetchFeishuChatMemberNames } from "../lib/feishu.js";
-import { buildFeishuChatMemberRecord, buildProjectMemberRecord, normalizeEmail, resolveMemberId } from "./project-member-records.js";
+import { buildAllowedProjectIds } from "../lib/project-access.js";
+import { fetchAndResolveFeishuChatMembers } from "./feishu-chat-sync.js";
+import {
+  buildFeishuChatMemberRecord,
+  buildProjectMemberRecord,
+  buildUserProjectMemberConditions,
+  normalizeEmail,
+  resolveMemberId,
+} from "./project-member-records.js";
 
 export async function getAllowedProjectIdsForUser(user) {
   if (!user) return [];
+  const allProjects = user.role === "ADMIN" ? await prisma.project.findMany({ select: { id: true } }) : [];
   if (user.role === "ADMIN") {
-    const projects = await prisma.project.findMany({ select: { id: true } });
-    return projects.map((project) => project.id);
+    return buildAllowedProjectIds({
+      role: user.role,
+      allProjectIds: allProjects.map((project) => project.id),
+    });
   }
 
-  const conditions = [];
-  if (user.id) conditions.push({ userId: user.id });
-  if (user.feishuUserId) conditions.push({ feishuUserId: user.feishuUserId });
-  if (user.feishuOpenId) conditions.push({ feishuOpenId: user.feishuOpenId });
-  if (user.feishuUnionId) conditions.push({ feishuUnionId: user.feishuUnionId });
-  if (user.email) conditions.push({ email: normalizeEmail(user.email) });
+  const conditions = buildUserProjectMemberConditions(user);
 
   const memberships = conditions.length
     ? await prisma.projectMember.findMany({
@@ -23,9 +28,10 @@ export async function getAllowedProjectIdsForUser(user) {
       })
     : [];
 
-  const ids = new Set(memberships.map((item) => item.projectId));
-  if (user.defaultProjectId) ids.add(user.defaultProjectId);
-  return [...ids];
+  return buildAllowedProjectIds({
+    role: user.role,
+    membershipProjectIds: memberships.map((item) => item.projectId),
+  });
 }
 
 export async function canUserMaintainProject(user, projectId) {
@@ -37,11 +43,7 @@ export async function canUserMaintainProject(user, projectId) {
 
 export async function ensureUserProjectMembershipLinks(user) {
   if (!user) return;
-  const conditions = [];
-  if (user.feishuUserId) conditions.push({ feishuUserId: user.feishuUserId });
-  if (user.feishuOpenId) conditions.push({ feishuOpenId: user.feishuOpenId });
-  if (user.feishuUnionId) conditions.push({ feishuUnionId: user.feishuUnionId });
-  if (user.email) conditions.push({ email: normalizeEmail(user.email) });
+  const conditions = buildUserProjectMemberConditions(user).filter((condition) => !condition.userId);
   if (!conditions.length) return;
 
   await prisma.projectMember.updateMany({
@@ -53,7 +55,7 @@ export async function ensureUserProjectMembershipLinks(user) {
   });
 }
 
-async function fetchStoredOrLiveChatMembers(chatId) {
+async function fetchStoredOrLiveChatMembers(chatId, options = {}) {
   const storedMembers = await prisma.feishuChatMember.findMany({
     where: { chatId },
     select: {
@@ -68,25 +70,12 @@ async function fetchStoredOrLiveChatMembers(chatId) {
   });
   if (storedMembers.length) return storedMembers;
 
-  const errors = [];
-  for (const memberIdType of ["user_id", "open_id"]) {
-    try {
-      const members = await fetchFeishuChatMemberNames(chatId, {
-        ignoreUserDetailErrors: true,
-        memberIdType,
-      });
-      if (members.length) return members;
-    } catch (error) {
-      errors.push(`${memberIdType}: ${error.message}`);
-    }
-  }
-
-  if (errors.length) throw new Error(errors.join("；"));
-  return [];
+  const result = await fetchAndResolveFeishuChatMembers(chatId, options.userId);
+  return result.members;
 }
 
-export async function syncProjectMembersFromFeishuChat(projectId, chatId) {
-  const members = await fetchStoredOrLiveChatMembers(chatId);
+export async function syncProjectMembersFromFeishuChat(projectId, chatId, options = {}) {
+  const members = await fetchStoredOrLiveChatMembers(chatId, options);
 
   await prisma.project.update({
     where: { id: projectId },

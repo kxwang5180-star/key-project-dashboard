@@ -6,9 +6,13 @@ import {
   fetchTenantAccessToken,
   refreshFeishuUserAccessToken,
 } from "../lib/feishu.js";
-import { buildChatMemberCountUpdate, buildEmptyMemberSyncWarning } from "./feishu-chat-sync-diagnostics.js";
+import {
+  buildChatMemberCountUpdate,
+  buildChatMemberFetchAttempts,
+  buildEmptyMemberSyncWarning,
+} from "./feishu-chat-sync-diagnostics.js";
 
-export { buildChatMemberCountUpdate, buildEmptyMemberSyncWarning };
+export { buildChatMemberCountUpdate, buildChatMemberFetchAttempts, buildEmptyMemberSyncWarning };
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -97,12 +101,7 @@ async function resolveChatMember(member, tenantAccessToken) {
 }
 
 async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken) {
-  const attempts = [
-    { token: userAccessToken, memberIdType: "open_id", label: "user:open_id" },
-    { token: userAccessToken, memberIdType: "user_id", label: "user:user_id" },
-    { token: tenantAccessToken, memberIdType: "open_id", label: "tenant:open_id" },
-    { token: tenantAccessToken, memberIdType: "user_id", label: "tenant:user_id" },
-  ];
+  const attempts = buildChatMemberFetchAttempts({ userAccessToken, tenantAccessToken });
   const errors = [];
   let emptyResult = null;
 
@@ -120,6 +119,20 @@ async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAcces
 
   if (errors.length) throw new Error(errors.join("；"));
   return emptyResult || { members: [], memberIdType: "user_id", source: "empty" };
+}
+
+export async function fetchAndResolveFeishuChatMembers(chatId, userId) {
+  const userAccessToken = userId ? await getValidUserAccessToken(userId) : null;
+  const tenantAccessToken = await fetchTenantAccessToken();
+  const result = await fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken);
+  const resolvedMembers = [];
+  for (const member of result.members) {
+    resolvedMembers.push(await resolveChatMember(member, tenantAccessToken));
+  }
+  return {
+    ...result,
+    members: resolvedMembers,
+  };
 }
 
 export async function syncMyFeishuChatsAndMembers(userId, options = {}) {

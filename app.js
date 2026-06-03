@@ -1,4 +1,6 @@
 import { mergeChatMembers, renderChatMemberChips } from "./src/ui/chat-members.js";
+import { chooseEffectiveProjectId } from "./src/lib/project-access.js";
+import { applyProjectBriefSnapshot, buildProjectBriefUpdatePayload } from "./src/services/project-records.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -39,7 +41,7 @@ const state = {
 const sourceRows = Array.isArray(window.PROJECT_SOURCE) ? window.PROJECT_SOURCE : [];
 let projectMaintenance = JSON.parse(localStorage.getItem("project-dashboard-maintenance") || "{}");
 let memberProfile = null;
-let submissions = JSON.parse(localStorage.getItem("project-dashboard-submissions") || "[]");
+let submissions = [];
 const authState = {
   loading: true,
   error: "",
@@ -203,7 +205,10 @@ function normalizeAuthenticatedUser(user) {
     role: getRoleLabel(user.role),
     roleKey: user.role === "ADMIN" ? "ADMIN" : "MEMBER",
     projectIds,
-    projectId: user.defaultProjectId || projectIds[0] || projects[0]?.id || "",
+    projectId: chooseEffectiveProjectId({
+      defaultProjectId: user.defaultProjectId || user.projectId,
+      allowedProjectIds: projectIds,
+    }),
     avatarUrl: user.avatarUrl || "",
     feishuLinked: Boolean(user.feishuLinked),
     isAdmin: user.role === "ADMIN",
@@ -262,6 +267,7 @@ async function loadCurrentUser() {
     }
     if (memberProfile) {
       await loadProjectChatBindings();
+      await loadWeeklyReports();
     }
     if (memberProfile?.canManageIdentity) {
       await loadRoleBindings();
@@ -272,6 +278,7 @@ async function loadCurrentUser() {
     if (error.status === 401) {
       memberProfile = null;
       authState.users = [];
+      submissions = [];
       authState.error = "";
     } else {
       authState.error = error.message;
@@ -298,6 +305,7 @@ async function loadProjectChatBindings() {
     if (!project) return;
     project.feishuChatId = serverProject.feishuChatId || "";
     project.owner = serverProject.ownerName || project.owner;
+    project.overallText = serverProject.description || project.overallText;
   });
 }
 
@@ -319,6 +327,13 @@ async function saveProjectChatBinding(projectId, chatId) {
   return apiRequest(`/api/projects/${projectId}/chat`, {
     method: "PUT",
     body: JSON.stringify({ chatId }),
+  });
+}
+
+async function saveProjectBrief(project, brief) {
+  return apiRequest(`/api/projects/${project.id}/brief`, {
+    method: "PUT",
+    body: JSON.stringify(buildProjectBriefUpdatePayload(brief)),
   });
 }
 
@@ -372,9 +387,52 @@ async function loadFeishuChats() {
   authState.chats = payload.chats || [];
 }
 
+async function loadWeeklyReports() {
+  if (!memberProfile) {
+    submissions = [];
+    return;
+  }
+  const payload = await apiRequest("/api/reports");
+  submissions = Array.isArray(payload.reports) ? payload.reports : [];
+}
+
+async function saveWeeklyReport(report) {
+  const payload = await apiRequest("/api/reports", {
+    method: "POST",
+    body: JSON.stringify({
+      projectId: report.projectId,
+      milestoneId: report.milestoneId || null,
+      weekNumber: report.week,
+      progress: report.progress,
+      riskSummary: report.risk || null,
+      milestoneTitle: report.milestoneTitle || null,
+      milestoneDate: report.milestoneDate || null,
+      milestoneState: report.milestoneStatus || null,
+    }),
+  });
+  return payload;
+}
+
 function getFeishuChatById(chatId) {
   if (!chatId) return null;
   return authState.chats.find((chat) => chat.chatId === chatId) || null;
+}
+
+function applyProjectReportState(projectState) {
+  if (!projectState?.projectId) return;
+  const project = projects.find((item) => item.id === projectState.projectId);
+  if (!project) return;
+  if (Array.isArray(projectState.milestones)) {
+    project.milestones = projectState.milestones.map((milestone, index) => normalizeMilestone(project, milestone, index));
+    getProjectMaintenance(project.id).milestones = project.milestones.map(serializeMilestone);
+  }
+  if (Array.isArray(projectState.risks)) {
+    const risks = projectState.risks.map((risk, index) => normalizeRisk(project, risk, index));
+    getProjectMaintenance(project.id).risks = risks;
+    project.risks = risks;
+  }
+  refreshProjectDerived(project);
+  persistProjectMaintenance();
 }
 
 function getReportableProjects() {
@@ -734,20 +792,15 @@ function getProjectMetricItems(project) {
 }
 
 function getProjectBriefData(project) {
-  const saved = getProjectMaintenance(project.id).brief || {};
   return {
-    owner: String(saved.owner || project.owner || "未填写").trim(),
-    overview: String(saved.overview || project.overallText || "").trim(),
+    owner: String(project.owner || "未填写").trim(),
+    overview: String(project.overallText || "").trim(),
   };
 }
 
-function setProjectBriefData(project, brief) {
-  getProjectMaintenance(project.id).brief = {
-    owner: String(brief.owner || "").trim() || project.owner || "未填写",
-    overview: String(brief.overview || "").trim() || project.overallText || "",
-  };
-  project.owner = getProjectMaintenance(project.id).brief.owner;
-  project.overallText = getProjectMaintenance(project.id).brief.overview;
+function applyProjectBrief(project, brief) {
+  applyProjectBriefSnapshot(project, brief);
+  delete getProjectMaintenance(project.id).brief;
   persistProjectMaintenance();
 }
 
@@ -761,7 +814,7 @@ function resetBriefDraft(projectId) {
 }
 
 function commitBriefDraft(project) {
-  setProjectBriefData(project, ensureBriefDraft(project));
+  applyProjectBrief(project, ensureBriefDraft(project));
   resetBriefDraft(project.id);
 }
 
@@ -834,9 +887,9 @@ function syncProjectBriefOverrides() {
   projects.forEach((project) => {
     const saved = getProjectMaintenance(project.id).brief;
     if (!saved) return;
-    if (saved.owner) project.owner = String(saved.owner).trim();
-    if (saved.overview) project.overallText = String(saved.overview).trim();
+    delete getProjectMaintenance(project.id).brief;
   });
+  persistProjectMaintenance();
 }
 
 function setProjectRiskItems(project, risks) {
@@ -2806,7 +2859,7 @@ function openProjectMaintenance(projectId) {
   renderMemberWorkspace();
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
     const nextView = viewButton.dataset.view;
@@ -3080,8 +3133,18 @@ document.addEventListener("click", (event) => {
   const saveBriefButton = event.target.closest("[data-save-brief]");
   if (saveBriefButton) {
     const project = getReportProject();
-    commitBriefDraft(project);
-    state.briefEditMode = false;
+    const brief = ensureBriefDraft(project);
+    state.saveNotice = "正在保存项目概览...";
+    renderMemberWorkspace();
+    try {
+      const payload = await saveProjectBrief(project, brief);
+      applyProjectBrief(project, payload.brief || brief);
+      resetBriefDraft(project.id);
+      state.briefEditMode = false;
+      state.saveNotice = "项目概览已保存。";
+    } catch (error) {
+      state.saveNotice = error.message;
+    }
     renderReportProjectBrief();
     renderProjectList();
     renderDetail();
@@ -3483,7 +3546,7 @@ document.querySelector("#memberReportForm").addEventListener("input", (event) =>
   }
 });
 
-document.querySelector("#memberReportForm").addEventListener("submit", (event) => {
+document.querySelector("#memberReportForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!memberProfile) {
     state.currentView = "register";
@@ -3527,64 +3590,26 @@ document.querySelector("#memberReportForm").addEventListener("submit", (event) =
   event.currentTarget.elements.progress.setCustomValidity("");
 
   const reportMilestone = getReportMilestone(reportProject);
-  if (reportMilestone) {
-    const oldDate = reportMilestone.dateInfo?.key || "";
-    const oldTitle = reportMilestone.title || "";
-    const existingChangeNote = String(reportMilestone.changeNote || "").trim();
-    const nextTitle = report.milestoneTitle || oldTitle;
-    const nextDate = report.milestoneDate || oldDate;
-    const nextStatus = editableMilestoneStatusMap[report.milestoneStatus] ? report.milestoneStatus : "planned";
-    const changedParts = [];
-    if (nextTitle !== oldTitle) changedParts.push(`名称由「${oldTitle}」调整为「${nextTitle}」`);
-    if (nextDate !== oldDate) changedParts.push(`日期由${oldDate || "未填写"}调整为${nextDate || "未填写"}`);
-    if (nextStatus === "changed" && !changedParts.length) changedParts.push("状态标记为变更，请补充具体变更点");
-    const nextChangeNote = changedParts.length
-      ? changedParts.join("；")
-      : nextStatus === "changed"
-        ? existingChangeNote || "状态标记为变更，请补充具体变更点"
-        : existingChangeNote;
-    const milestones = getReportMilestones(reportProject).map((milestone) => {
-      if (milestone.id !== reportMilestone.id) return milestone;
-      return normalizeMilestone(reportProject, {
-        ...serializeMilestone(milestone),
-        title: nextTitle,
-        raw: nextTitle,
-        dateKey: nextDate,
-        status: nextStatus,
-        changeNote: nextChangeNote,
-      });
-    });
-    setProjectMilestones(reportProject, milestones);
-    report.milestoneId = reportMilestone.id;
-  }
+  if (reportMilestone) report.milestoneId = reportMilestone.id;
 
-  if (report.risk && report.risk !== "暂无") {
-    const risks = getProjectRiskItems(reportProject);
-    risks.unshift(
-      normalizeRisk(reportProject, {
-        id: uid(`${reportProject.id}-risk`),
-        level: "medium",
-        title: "本周填报风险",
-        detail: report.risk,
-        owner: memberProfile.name,
-        dueDate: "",
-        status: "open",
-        source: "成员填报",
-      })
-    );
-    setProjectRiskItems(reportProject, risks);
+  try {
+    const payload = await saveWeeklyReport(report);
+    const savedReport = payload?.report;
+    applyProjectReportState(payload?.projectState);
+    submissions = [savedReport || report, ...submissions.filter((item) => item.id !== savedReport?.id)].slice(0, 100);
+    await loadWeeklyReports();
+    state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，已同步到服务端`;
+    event.currentTarget.reset();
+    document.querySelector("#reportProjectSelect").value = report.projectId;
+    renderMemberWorkspace();
+    renderDetail();
+    renderRisks();
+    renderProjectList();
+    renderGovernance();
+  } catch (error) {
+    state.saveNotice = error.message || "周报保存失败，请稍后重试";
+    renderMemberWorkspace();
   }
-
-  submissions = [report, ...submissions].slice(0, 100);
-  localStorage.setItem("project-dashboard-submissions", JSON.stringify(submissions));
-  state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，老板看板和 PMO 治理已同步读取`;
-  event.currentTarget.reset();
-  document.querySelector("#reportProjectSelect").value = report.projectId;
-  renderMemberWorkspace();
-  renderDetail();
-  renderRisks();
-  renderProjectList();
-  renderGovernance();
 });
 
 document.addEventListener("keydown", (event) => {

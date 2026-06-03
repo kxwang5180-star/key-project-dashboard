@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildFeishuChatMemberRecord,
   buildProjectMemberRecord,
+  buildUserProjectMemberConditions,
 } from "../src/services/project-member-records.js";
 
 test("buildProjectMemberRecord normalizes ids and email for project permission matching", () => {
@@ -65,4 +66,26 @@ test("buildFeishuChatMemberRecord preserves synced members for later chat list d
       user: { name: "赵长硕" },
     },
   });
+});
+
+test("buildUserProjectMemberConditions builds stable permission matching conditions", () => {
+  const conditions = buildUserProjectMemberConditions({
+    id: "user_1",
+    feishuUserId: "u_123",
+    feishuOpenId: "ou_123",
+    feishuUnionId: "on_123",
+    email: " USER@example.COM ",
+  });
+
+  assert.deepEqual(conditions, [
+    { userId: "user_1" },
+    { feishuUserId: "u_123" },
+    { feishuOpenId: "ou_123" },
+    { feishuUnionId: "on_123" },
+    { email: "user@example.com" },
+  ]);
+});
+
+test("buildUserProjectMemberConditions omits empty identity fields", () => {
+  assert.deepEqual(buildUserProjectMemberConditions({ email: " " }), []);
 });

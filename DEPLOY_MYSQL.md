@@ -87,6 +87,22 @@ npm run seed
 
 ## 7. 启动服务
 
+启动前建议先跑一轮自检：
+
+```bash
+npm test
+npm run check
+npm run preflight -- --skip-http
+```
+
+服务启动后，再检查 API 入口是否确实返回 JSON，避免反向代理或 API 路径错误导致前端收到 HTML 页面：
+
+```bash
+npm run preflight -- --base-url http://127.0.0.1:3000
+```
+
+自检会检查关键环境变量、`FEISHU_REDIRECT_URI` 地址格式，以及 `/api`、`/api/health`、`/api/auth/me` 的返回类型。
+
 开发：
 
 ```bash

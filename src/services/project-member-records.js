@@ -7,6 +7,18 @@ export function resolveMemberId(member, fallbackPrefix = "") {
   return member.memberId || member.feishuUserId || member.feishuOpenId || email || `${fallbackPrefix}-${member.name || "member"}`;
 }
 
+export function buildUserProjectMemberConditions(user) {
+  if (!user) return [];
+  const email = normalizeEmail(user.email);
+  return [
+    user.id ? { userId: user.id } : undefined,
+    user.feishuUserId ? { feishuUserId: user.feishuUserId } : undefined,
+    user.feishuOpenId ? { feishuOpenId: user.feishuOpenId } : undefined,
+    user.feishuUnionId ? { feishuUnionId: user.feishuUnionId } : undefined,
+    email ? { email } : undefined,
+  ].filter(Boolean);
+}
+
 export function buildProjectMemberRecord(member, { projectId, matchedUserId = null }) {
   const memberId = resolveMemberId(member, projectId);
   const email = normalizeEmail(member.email);
