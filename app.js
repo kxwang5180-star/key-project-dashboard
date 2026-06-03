@@ -34,6 +34,7 @@ const state = {
   chatSearch: "",
   chatSearchComposing: false,
   expandedProjectGroups: {},
+  expandedChatMembers: {},
   userEditModalOpen: false,
   userEditTargetId: null,
 };
@@ -297,9 +298,11 @@ async function loadCurrentUser() {
       await loadWeeklyReports();
     }
     if (memberProfile?.canManageIdentity) {
+      await loadFeishuChats();
       await loadRoleBindings();
     } else {
       authState.users = [];
+      authState.chats = [];
     }
   } catch (error) {
     if (error.status === 401) {
@@ -1792,6 +1795,8 @@ function renderProjectSelects() {
   if (reportProjectSelect) {
     reportProjectSelect.innerHTML = options || '<option value="">暂无可维护项目</option>';
     reportProjectSelect.disabled = !reportableProjects.length;
+    reportProjectSelect.classList.toggle("is-hidden", reportableProjects.length <= 1);
+    reportProjectSelect.closest(".report-project-picker")?.classList.toggle("is-hidden", reportableProjects.length <= 1);
   }
 
   if (memberProfile?.projectId && reportProjectSelect && reportableProjects.some((project) => project.id === memberProfile.projectId)) {
@@ -1827,14 +1832,11 @@ function renderAuthCenter() {
   if (!memberProfile) {
     authPanel.innerHTML = `
       <div class="auth-stack login-entry">
-        <span class="login-status-dot">未登录</span>
         <div class="auth-copy">
-          <strong>使用飞书登录</strong>
-          <p>完成企业身份验证后进入系统。</p>
+          <strong>飞书登录</strong>
+          <p>仅读取基础身份，并按项目群成员关系开放维护权限。</p>
         </div>
-        <div class="auth-actions">
-          <button class="primary-action feishu-login-button" type="button" data-feishu-login>使用飞书登录</button>
-        </div>
+        <button class="primary-action feishu-login-button" type="button" data-feishu-login>进入系统</button>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;
@@ -1889,10 +1891,10 @@ function renderAuthCenter() {
     }
   }
 
-  const groupEntries = [
-    ...(adminUsers.length
-      ? [{ project: { id: "__admins", shortName: "管理员", businessLine: "统一管理全局权限", color: "#5b4cc4" }, users: adminUsers }]
-      : []),
+  const adminGroup = adminUsers.length
+    ? { project: { id: "__admins", shortName: "管理员", businessLine: "身份与全局管理", color: "#5b4cc4" }, users: adminUsers }
+    : null;
+  const memberGroupEntries = [
     ...projects
       .filter((p) => projectUsers[p.id]?.length)
       .map((p) => ({ project: p, users: sortUsersByName(projectUsers[p.id]) })),
@@ -1911,6 +1913,37 @@ function renderAuthCenter() {
 
   const refreshLabel = authState.usersRefreshing ? "刷新中..." : "刷新";
   const syncChatLabel = authState.chatSyncing ? "同步中..." : "同步我的飞书群聊";
+  const renderUserGroupCard = ({ project, users }, options = {}) => {
+    const isExpanded = state.expandedProjectGroups[project.id] !== false;
+    const arrow = isExpanded ? "▾" : "▸";
+    const compact = options.compact ? " is-compact" : "";
+    return `
+      <article class="project-group-card${compact} ${isExpanded ? "is-expanded" : ""}" data-project-group="${project.id}">
+        <button class="project-group-head" type="button" data-toggle-project-group="${project.id}">
+          <span class="project-group-avatar" style="--project-color: ${escapeHtml(project.color || "#6b7280")}">${escapeHtml(project.shortName.slice(0, 1))}</span>
+          <div class="project-group-meta">
+            <strong>${escapeHtml(project.shortName)}</strong>
+            <span>${users.length} 人 · ${escapeHtml(project.businessLine || "")}</span>
+          </div>
+          <span class="project-group-arrow">${arrow}</span>
+        </button>
+        <div class="project-group-body ${isExpanded ? "" : "is-collapsed"}">
+          <div class="avatar-strip ${options.compact ? "is-compact" : ""}">
+            ${users
+              .map(
+                (user) => `
+                  <button class="avatar-chip" type="button" data-open-user-edit="${user.id}" title="${escapeHtml(user.name)} · ${escapeHtml(getUserContactLabel(user))}">
+                    ${options.compact ? "" : `<span class="identity-avatar is-small">${escapeHtml(getDisplayInitials(user.name))}</span>`}
+                    <span class="avatar-chip-label">${escapeHtml(user.name)}</span>
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        </div>
+      </article>
+    `;
+  };
 
   roleBindingPanel.innerHTML = `
     <div class="role-binding-head">
@@ -1926,74 +1959,60 @@ function renderAuthCenter() {
       authState.chatSyncErrors.length
         ? `<div class="sync-error-list">${authState.chatSyncErrors
             .slice(0, 5)
-            .map((item) => `<p><strong>${escapeHtml(item.name || item.chatId)}</strong>${escapeHtml(item.message || "成员读取失败")}</p>`)
+            .map((item) => `<p><strong>${escapeHtml(item.name || "未命名群聊")}</strong>${escapeHtml(item.message || "成员读取失败")}</p>`)
             .join("")}</div>`
         : ""
     }
-    <div class="project-group-list">
-      ${groupEntries
-        .map(
-          ({ project, users }) => {
-            const isExpanded = state.expandedProjectGroups[project.id] !== false;
-            const arrow = isExpanded ? "▾" : "▸";
-            return `
-              <article class="project-group-card ${isExpanded ? "is-expanded" : ""}" data-project-group="${project.id}">
-                <button class="project-group-head" type="button" data-toggle-project-group="${project.id}">
-                  <span class="project-group-avatar" style="--project-color: ${escapeHtml(project.color || "#6b7280")}">${escapeHtml(project.shortName.slice(0, 1))}</span>
-                  <div class="project-group-meta">
-                    <strong>${escapeHtml(project.shortName)}</strong>
-                    <span>${users.length} 人 · ${escapeHtml(project.businessLine || "")}</span>
-                  </div>
-                  <span class="project-group-arrow">${arrow}</span>
-                </button>
-                <div class="project-group-body ${isExpanded ? "" : "is-collapsed"}">
-                  <div class="avatar-strip">
-                    ${users
-                      .map(
-                        (user) => `
-                          <button class="avatar-chip" type="button" data-open-user-edit="${user.id}" title="${escapeHtml(user.name)} · ${escapeHtml(getUserContactLabel(user))}">
-                            <span class="identity-avatar is-small">${escapeHtml(getDisplayInitials(user.name))}</span>
-                            <span class="avatar-chip-label">${escapeHtml(user.name)}</span>
-                          </button>
-                        `
-                      )
-                      .join("")}
-                  </div>
-                </div>
-              </article>
-            `;
-          }
-        )
-        .join("")}
-      ${!groupEntries.length ? '<div class="empty-state">暂无已登录用户</div>' : ""}
+    <div class="identity-groups-layout">
+      <section class="identity-admin-column">
+        <div class="identity-group-section-head"><strong>管理员</strong><span>${adminUsers.length} 人</span></div>
+        ${adminGroup ? renderUserGroupCard(adminGroup, { compact: true }) : '<div class="empty-state">暂无管理员</div>'}
+      </section>
+      <section class="identity-member-column">
+        <div class="identity-group-section-head">
+          <strong>项目成员</strong>
+          <span>${memberGroupEntries.reduce((sum, group) => sum + group.users.length, 0)} 人</span>
+        </div>
+        <div class="project-group-list">
+          ${memberGroupEntries.map((entry) => renderUserGroupCard(entry)).join("")}
+          ${!memberGroupEntries.length ? '<div class="empty-state">暂无项目成员</div>' : ""}
+        </div>
+      </section>
     </div>
     <div class="role-binding-head project-chat-head">
       <strong>项目群聊绑定</strong>
       <div class="role-binding-toolbar">
         <button class="tiny-action" type="button" data-sync-my-feishu-chats ${authState.chatSyncing ? "disabled" : ""}>${syncChatLabel}</button>
       </div>
-      <span>先同步你账号加入的群聊和成员，再将项目绑定到对应群聊。</span>
+      <span>同步群聊后选择项目群，再同步成员。</span>
     </div>
     <div class="role-binding-list chat-binding-grid">
       ${projects
         .map((project) => {
           const chat = getFeishuChatById(project.feishuChatId);
           const chatMembers = chat?.members || [];
+          const chatMemberKey = `project:${project.id}`;
+          const chatName = chat?.name || (project.feishuChatId ? "已绑定群聊" : "未选择群聊");
           return `
             <article class="binding-row project-chat-row" data-project-chat-row="${project.id}">
               <div class="binding-user">
                 <span class="identity-avatar is-small">${escapeHtml(project.shortName.slice(0, 1))}</span>
                 <div>
                   <strong>${escapeHtml(project.shortName)}</strong>
-                  <span>${escapeHtml(chat?.name || project.businessLine || "未填业务线")}</span>
+                  <span>${escapeHtml(project.businessLine || "未填业务线")}</span>
                 </div>
               </div>
-              <label>
-                <span>群聊 chat_id</span>
-                <input data-project-chat-id="${project.id}" value="${escapeHtml(project.feishuChatId || "")}" placeholder="请选择群聊" readonly />
-              </label>
+              <div class="project-chat-summary">
+                <span>项目群</span>
+                <strong>${escapeHtml(chatName)}</strong>
+                <input type="hidden" data-project-chat-id="${project.id}" value="${escapeHtml(project.feishuChatId || "")}" />
+              </div>
               <div class="project-chat-members">
-                ${renderChatMemberChips(chatMembers, { limit: 6 })}
+                ${renderChatMemberChips(chatMembers, {
+                  limit: 6,
+                  groupId: chatMemberKey,
+                  expanded: Boolean(state.expandedChatMembers[chatMemberKey]),
+                })}
               </div>
               <div class="binding-actions">
                 <button class="secondary-action compact-action" type="button" data-open-chat-picker="${project.id}">选择群聊</button>
@@ -2026,7 +2045,7 @@ function renderChatPickerModal() {
       <p class="modal-eyebrow">项目群聊选择</p>
       <h3 id="chatPickerTitle">${escapeHtml(project?.shortName || "选择项目群聊")}</h3>
       <div class="chat-picker-tools">
-        <input id="chatPickerSearch" value="${escapeHtml(state.chatSearch)}" placeholder="搜索群聊名称、chat_id 或成员姓名" />
+        <input id="chatPickerSearch" value="${escapeHtml(state.chatSearch)}" placeholder="搜索群聊名称或成员姓名" />
         <button class="secondary-action compact-action" type="button" data-refresh-chat-list ${authState.chatsRefreshing ? "disabled" : ""}>${authState.chatsRefreshing ? "刷新中..." : "刷新列表"}</button>
       </div>
       <div class="chat-picker-list">
@@ -2037,9 +2056,13 @@ function renderChatPickerModal() {
                   (chat) => `
                     <article class="chat-option">
                       <div class="chat-option-main">
-                        <strong>${escapeHtml(chat.name || chat.chatId)}</strong>
+                        <strong>${escapeHtml(chat.name || "未命名群聊")}</strong>
                         <span>${Number(chat.memberCount || chat.members?.length || 0)} 人</span>
-                        ${renderChatMemberChips(chat.members || [], { limit: 12 })}
+                        ${renderChatMemberChips(chat.members || [], {
+                          limit: 12,
+                          groupId: `chat:${chat.chatId}`,
+                          expanded: Boolean(state.expandedChatMembers[`chat:${chat.chatId}`]),
+                        })}
                       </div>
                       <button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}">选择</button>
                     </article>
@@ -2942,6 +2965,15 @@ document.addEventListener("click", async (event) => {
     const isExpanded = state.expandedProjectGroups[groupId] !== false;
     state.expandedProjectGroups[groupId] = !isExpanded;
     renderAuthCenter();
+    return;
+  }
+
+  const toggleChatMembersButton = event.target.closest("[data-toggle-chat-members]");
+  if (toggleChatMembersButton) {
+    const groupId = toggleChatMembersButton.dataset.toggleChatMembers;
+    state.expandedChatMembers[groupId] = !state.expandedChatMembers[groupId];
+    if (state.chatPickerOpen && groupId.startsWith("chat:")) renderChatPickerModal();
+    else renderAuthCenter();
     return;
   }
 

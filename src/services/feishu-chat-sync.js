@@ -10,10 +10,11 @@ import {
 import {
   buildChatMemberCountUpdate,
   buildChatMemberFetchAttempts,
+  buildFeishuChatUpsertArgs,
   buildEmptyMemberSyncWarning,
 } from "./feishu-chat-sync-diagnostics.js";
 
-export { buildChatMemberCountUpdate, buildChatMemberFetchAttempts, buildEmptyMemberSyncWarning };
+export { buildChatMemberCountUpdate, buildChatMemberFetchAttempts, buildFeishuChatUpsertArgs, buildEmptyMemberSyncWarning };
 
 function getTokenExpiresAt(tokenData) {
   const expiresIn = Number(tokenData.expires_in || tokenData.expiresIn || 0);
@@ -186,26 +187,14 @@ export async function syncMyFeishuChatsAndMembers(userId, options = {}) {
     });
 
     await prisma.$transaction(async (tx) => {
-      await tx.feishuChat.upsert({
-        where: { chatId },
-        update: {
-          name: chat.name || chatId,
-          description: chat.description || null,
-          discoveredBy: { connect: { id: userId } },
-          memberCount: memberCountUpdate.memberCount,
-          lastSyncedAt: new Date(),
-          raw: { chat, memberSource },
-        },
-        create: {
+      await tx.feishuChat.upsert(
+        buildFeishuChatUpsertArgs({
+          chat,
           chatId,
-          name: chat.name || chatId,
-          description: chat.description || null,
-          discoveredBy: { connect: { id: userId } },
+          userId,
           memberCount: memberCountUpdate.memberCount,
-          lastSyncedAt: new Date(),
-          raw: { chat, memberSource },
-        },
-      });
+        })
+      );
 
       const activeMemberIds = resolvedMembers.map((member) => member.memberId).filter(Boolean);
       if (activeMemberIds.length) {

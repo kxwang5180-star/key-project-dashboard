@@ -26,10 +26,20 @@ export function normalizeChatMembers(members) {
 
 export function renderChatMemberChips(members, options = {}) {
   const limit = Number(options.limit || 12);
+  const groupId = String(options.groupId || "").trim();
+  const expanded = Boolean(options.expanded);
   const normalized = normalizeChatMembers(members);
   if (!normalized.length) return '<p class="chat-member-empty">暂无成员信息</p>';
-  const visibleMembers = normalized.slice(0, limit);
+  const visibleMembers = expanded ? normalized : normalized.slice(0, limit);
   const hiddenCount = Math.max(normalized.length - visibleMembers.length, 0);
+  const toggle =
+    normalized.length > limit && groupId
+      ? `<button class="chat-member-more" type="button" data-toggle-chat-members="${escapeHtml(groupId)}">${
+          expanded ? "收起" : `+${hiddenCount}`
+        }</button>`
+      : hiddenCount
+        ? `<span class="chat-member-more">+${hiddenCount}</span>`
+        : "";
   return `
     <div class="chat-member-strip">
       ${visibleMembers
@@ -39,7 +49,7 @@ export function renderChatMemberChips(members, options = {}) {
           `
         )
         .join("")}
-      ${hiddenCount ? `<span class="chat-member-more">+${hiddenCount}</span>` : ""}
+      ${toggle}
     </div>
   `;
 }

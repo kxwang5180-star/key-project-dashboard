@@ -15,6 +15,24 @@ export function buildChatMemberFetchAttempts({ userAccessToken, tenantAccessToke
   ].filter(Boolean);
 }
 
+export function buildFeishuChatUpsertArgs({ chat, chatId, userId, memberCount = 0, syncedAt = new Date() }) {
+  const data = {
+    name: chat?.name || chatId,
+    description: chat?.description || null,
+    discoveredBy: { connect: { id: userId } },
+    memberCount: Number(memberCount || 0),
+    lastSyncedAt: syncedAt,
+  };
+  return {
+    where: { chatId },
+    update: data,
+    create: {
+      chatId,
+      ...data,
+    },
+  };
+}
+
 export function buildChatMemberCountUpdate({ existingMemberCount = 0, resolvedMemberCount = 0, chatMemberCount = 0, includeMembers = false }) {
   if (includeMembers) {
     return { memberCount: resolvedMemberCount || Number(chatMemberCount || 0) };

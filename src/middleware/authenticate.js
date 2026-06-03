@@ -31,6 +31,7 @@ export async function authenticate(req, res, next) {
     }
     console.error("Authentication error:", error);
     res.status(503).json({ message: "服务暂时不可用，请稍后重试" });
+  }
 }
 
 export function requireRoles(...roles) {

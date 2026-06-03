@@ -11,6 +11,20 @@ test("renderChatMemberChips renders name chips without avatars", () => {
 
   assert.match(html, /<span class="chat-member-chip"[^>]*>王康旭<\/span>/);
   assert.match(html, /<span class="chat-member-chip"[^>]*>赵长硕<\/span>/);
+  assert.doesNotMatch(html, /chat-member-avatar/);
+});
+
+test("renderChatMemberChips renders an expandable control for hidden members", () => {
+  const members = [{ name: "王康旭" }, { name: "赵长硕" }, { name: "姚翔宇" }];
+  const collapsed = renderChatMemberChips(members, { limit: 2, groupId: "project_1" });
+  assert.match(collapsed, /data-toggle-chat-members="project_1"/);
+  assert.match(collapsed, />\+1<\/button>/);
+  assert.doesNotMatch(collapsed, /姚翔宇/);
+
+  const expanded = renderChatMemberChips(members, { limit: 2, groupId: "project_1", expanded: true });
+  assert.match(expanded, /姚翔宇/);
+  assert.match(expanded, /data-toggle-chat-members="project_1"/);
+  assert.match(expanded, />收起<\/button>/);
 });
 
 test("renderChatMemberChips renders an empty state for missing members", () => {

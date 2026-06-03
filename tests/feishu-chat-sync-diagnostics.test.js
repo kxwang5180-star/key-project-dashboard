@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildChatMemberCountUpdate,
   buildChatMemberFetchAttempts,
+  buildFeishuChatUpsertArgs,
   buildEmptyMemberSyncWarning,
 } from "../src/services/feishu-chat-sync-diagnostics.js";
 
@@ -59,4 +60,27 @@ test("buildChatMemberFetchAttempts tries user token before tenant token for sele
       { token: "tenant-token", memberIdType: "user_id", label: "tenant:user_id" },
     ]
   );
+});
+
+test("buildFeishuChatUpsertArgs uses Prisma relation fields and schema-safe data", () => {
+  const args = buildFeishuChatUpsertArgs({
+    chat: {
+      chat_id: "oc_1",
+      name: "项目群",
+      description: "",
+      member_count: 28,
+    },
+    chatId: "oc_1",
+    userId: "user_1",
+    memberCount: 28,
+    syncedAt: new Date("2026-06-03T00:00:00Z"),
+  });
+
+  assert.equal(args.where.chatId, "oc_1");
+  assert.equal(args.create.name, "项目群");
+  assert.deepEqual(args.create.discoveredBy, { connect: { id: "user_1" } });
+  assert.equal(Object.hasOwn(args.create, "ownerUserId"), false);
+  assert.equal(Object.hasOwn(args.create, "raw"), false);
+  assert.equal(Object.hasOwn(args.update, "ownerUserId"), false);
+  assert.equal(Object.hasOwn(args.update, "raw"), false);
 });
