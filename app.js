@@ -8,9 +8,12 @@ import {
 } from "./src/services/governance-records.js";
 import {
   buildFocusedMilestonePatch,
+  getMilestoneCalendarSource,
   updateMetricDraftField,
   updateMilestoneDraftField,
 } from "./src/ui/maintenance-drafts.js";
+import { mergeBootstrapProjects } from "./src/ui/project-bootstrap.js";
+import { buildProjectUserGroups } from "./src/ui/identity-groups.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -305,9 +308,7 @@ async function loadCurrentUser() {
       if (reportProjectSelect) reportProjectSelect.value = memberProfile.projectId;
     }
     if (memberProfile) {
-      await loadProjectChatBindings();
-      await loadWeeklyReports();
-      if (memberProfile.isAdmin) await loadGovernanceTasks();
+      await loadBootstrapData();
     }
     if (memberProfile?.canManageIdentity) {
       await loadFeishuChats();
@@ -349,6 +350,55 @@ async function loadProjectChatBindings() {
     project.owner = serverProject.ownerName || project.owner;
     project.overallText = serverProject.description || project.overallText;
   });
+}
+
+function pruneProjectScopedState() {
+  const allowedIds = new Set(projects.map((project) => project.id));
+  projectMaintenance = Object.fromEntries(
+    Object.entries(projectMaintenance).filter(([projectId]) => projectId.startsWith("__") || allowedIds.has(projectId))
+  );
+  Object.keys(draftStore.briefs).forEach((projectId) => {
+    if (!allowedIds.has(projectId)) delete draftStore.briefs[projectId];
+  });
+  Object.keys(draftStore.metrics).forEach((projectId) => {
+    if (!allowedIds.has(projectId)) delete draftStore.metrics[projectId];
+  });
+  Object.keys(draftStore.milestones).forEach((projectId) => {
+    if (!allowedIds.has(projectId)) delete draftStore.milestones[projectId];
+  });
+  persistProjectMaintenance();
+}
+
+function applyBootstrapPayload(payload) {
+  const bootstrapRows = mergeBootstrapProjects(sourceRows, payload?.projects || [], { preferBootstrap: true });
+  projects = buildProjects(bootstrapRows);
+  applyProjectMaintenance();
+  (payload?.projects || []).forEach((projectPayload) => {
+    const project = projects.find((item) => item.id === projectPayload.id);
+    if (!project) return;
+    if (projectPayload.brief) applyProjectBriefSnapshot(project, projectPayload.brief);
+    if (projectPayload.projectState) applyProjectReportState(projectPayload.projectState);
+  });
+  submissions = (payload?.projects || []).flatMap((project) => project.reports || []);
+  governanceTasks = Array.isArray(payload?.governanceTasks) ? payload.governanceTasks : [];
+  if (!projects.some((project) => project.id === state.selectedId)) {
+    state.selectedId = projects[0]?.id || null;
+  }
+  const reportProjectSelect = document.querySelector("#reportProjectSelect");
+  if (reportProjectSelect) {
+    const nextProjectId = chooseEffectiveProjectId({
+      defaultProjectId: reportProjectSelect.value || memberProfile?.projectId,
+      allowedProjectIds: projects.map((project) => project.id),
+    });
+    reportProjectSelect.value = nextProjectId;
+    if (memberProfile && nextProjectId) memberProfile.projectId = nextProjectId;
+  }
+  pruneProjectScopedState();
+}
+
+async function loadBootstrapData() {
+  const payload = await apiRequest("/api/bootstrap");
+  applyBootstrapPayload(payload);
 }
 
 async function saveRoleBinding(userId, role, defaultProjectId) {
@@ -401,8 +451,8 @@ async function saveProjectMetrics(project) {
   });
 }
 
-async function saveProjectMilestones(project) {
-  const milestones = getReportMilestones(project).map((milestone) => ({
+async function saveProjectMilestones(project, milestoneSource = getReportMilestones(project)) {
+  const milestones = milestoneSource.map((milestone) => ({
     id: milestone.id,
     title: milestone.title,
     raw: milestone.raw || milestone.title,
@@ -813,7 +863,7 @@ function buildProjects(rows) {
     });
 }
 
-const projects = buildProjects(sourceRows);
+let projects = buildProjects(sourceRows);
 syncProjectBriefOverrides();
 state.selectedId = projects[0]?.id || null;
 
@@ -1074,10 +1124,27 @@ function updateFocusedMilestoneFromForm() {
     },
     serializeMilestone(milestone)
   );
-  project.milestones = getReportMilestones(project).map((item, index) =>
+  const updated = getReportMilestones(project).map((item, index) =>
     item.id === milestone.id ? normalizeMilestone(project, { ...serializeMilestone(item), ...patch }, index) : item
   );
-  refreshProjectDerived(project);
+  if (hasActiveMilestoneDraft(project)) {
+    draftStore.milestones[project.id] = updated;
+  } else {
+    project.milestones = updated;
+    refreshProjectDerived(project);
+  }
+}
+
+function refreshMilestoneMaintenanceViews({ renderRail = true, syncFields = true } = {}) {
+  if (renderRail) renderReportMilestoneRail();
+  if (syncFields) syncReportMilestoneFields();
+  renderWeekTimeline();
+  renderReportProjectBrief();
+  renderCalendar();
+  renderDetail();
+  renderGovernance();
+  renderReportStatusPanel();
+  renderSummary();
 }
 
 function ensureMilestoneDraft(project) {
@@ -1477,9 +1544,16 @@ function renderCalendar() {
   const calendarProjects = state.calendarProject === "all"
     ? filtered
     : filtered.filter((project) => project.id === state.calendarProject);
+  const reportProject = getReportProject();
   const milestones = calendarProjects
     .flatMap((project) =>
-      project.milestones.map((milestone) => ({
+      getMilestoneCalendarSource({
+        projectId: project.id,
+        reportProjectId: reportProject?.id,
+        isManagingMilestones: state.milestoneManageMode,
+        projectMilestones: project.milestones,
+        draftMilestones: draftStore.milestones[project.id],
+      }).map((milestone) => ({
         ...milestone,
         projectColor: project.color,
       }))
@@ -1583,9 +1657,25 @@ function getReportProject() {
   return reportableProjects.find((item) => item.id === select?.value) || reportableProjects[0] || projects[0];
 }
 
+function hasActiveMilestoneDraft(project) {
+  return Boolean(
+    project &&
+    state.milestoneManageMode &&
+    getReportProject()?.id === project.id &&
+    Array.isArray(draftStore.milestones[project.id])
+  );
+}
+
+function getReportMilestoneSource(project) {
+  if (hasActiveMilestoneDraft(project)) {
+    return draftStore.milestones[project.id];
+  }
+  return project?.milestones || [];
+}
+
 function getReportMilestones(project) {
   if (!project) return [];
-  return [...project.milestones].sort((a, b) => {
+  return [...getReportMilestoneSource(project)].sort((a, b) => {
     const aTime = a.dateInfo?.date?.getTime() ?? Number.MAX_SAFE_INTEGER;
     const bTime = b.dateInfo?.date?.getTime() ?? Number.MAX_SAFE_INTEGER;
     return aTime - bTime;
@@ -1988,18 +2078,11 @@ function renderAuthCenter() {
 
   roleBindingWrapper.classList.remove("is-hidden");
 
-  // Group users by projectId
   const adminUsers = sortUsersByName(authState.users.filter((user) => user.roleKey === "ADMIN"));
-  const projectUsers = {};
-  const unassignedUsers = [];
-  for (const user of authState.users.filter((item) => item.roleKey !== "ADMIN")) {
-    if (user.projectId && projects.some((p) => p.id === user.projectId)) {
-      if (!projectUsers[user.projectId]) projectUsers[user.projectId] = [];
-      projectUsers[user.projectId].push(user);
-    } else {
-      unassignedUsers.push(user);
-    }
-  }
+  const { projectUsers, unassignedUsers } = buildProjectUserGroups(
+    authState.users.filter((item) => item.roleKey !== "ADMIN"),
+    projects
+  );
 
   const adminGroup = adminUsers.length
     ? { project: { id: "__admins", shortName: "管理员", businessLine: "身份与全局管理", color: "#5b4cc4" }, users: adminUsers }
@@ -3415,7 +3498,7 @@ document.addEventListener("click", async (event) => {
     milestones.push(nextMilestone);
     state.selectedReportMilestoneId = nextMilestone.id;
     state.milestoneManageMode = true;
-    renderReportMilestoneRail();
+    refreshMilestoneMaintenanceViews();
     return;
   }
 
@@ -3425,34 +3508,29 @@ document.addEventListener("click", async (event) => {
     const milestones = ensureMilestoneDraft(project).filter((milestone) => milestone.id !== deleteMilestone.dataset.deleteMilestone);
     draftStore.milestones[project.id] = milestones;
     state.selectedReportMilestoneId = milestones[0]?.id || null;
-    renderReportMilestoneRail();
+    refreshMilestoneMaintenanceViews();
     return;
   }
 
   const saveMilestonesButton = event.target.closest("[data-save-milestones]");
   if (saveMilestonesButton) {
     const project = getReportProject();
-    commitMilestoneDraft(project);
-    state.milestoneManageMode = false;
+    const milestoneDraft = ensureMilestoneDraft(project);
     state.saveNotice = "正在保存项目里程碑...";
-    renderMemberWorkspace();
-    saveProjectMilestones(project)
+    renderReportStatusPanel();
+    saveProjectMilestones(project, milestoneDraft)
       .then((payload) => {
-        applyProjectReportState(payload?.projectState);
+        if (payload?.projectState) applyProjectReportState(payload.projectState);
+        else setProjectMilestones(project, milestoneDraft);
+        resetMilestoneDraft(project.id);
+        state.milestoneManageMode = false;
         state.saveNotice = "项目里程碑已保存。";
       })
       .catch((error) => {
         state.saveNotice = error.message;
       })
       .finally(() => {
-        renderReportMilestoneRail();
-        renderWeekTimeline();
-        renderReportProjectBrief();
-        renderCalendar();
-        renderDetail();
-        renderGovernance();
-        renderReportStatusPanel();
-        renderSummary();
+        refreshMilestoneMaintenanceViews();
       });
     return;
   }
@@ -3609,6 +3687,7 @@ document.addEventListener("change", (event) => {
   const milestoneField = event.target.closest("[data-milestone-field]");
   if (milestoneField) {
     updateMilestoneDraftFromField(milestoneField);
+    refreshMilestoneMaintenanceViews();
     return;
   }
 
@@ -3644,10 +3723,7 @@ document.addEventListener("change", (event) => {
   if (event.target.matches("input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']")) {
     updateFocusedMilestoneFromForm();
     state.saveNotice = "";
-    renderReportMilestoneRail();
-    renderWeekTimeline();
-    renderReportProjectBrief();
-    renderReportStatusPanel();
+    refreshMilestoneMaintenanceViews({ syncFields: false });
   }
 
   if (event.target.id === "businessLineFilter") {
@@ -3696,6 +3772,7 @@ document.addEventListener("input", (event) => {
   const milestoneField = event.target.closest("[data-milestone-field]");
   if (milestoneField) {
     updateMilestoneDraftFromField(milestoneField);
+    refreshMilestoneMaintenanceViews({ renderRail: false });
     return;
   }
 });
@@ -3724,10 +3801,7 @@ memberReportForm.addEventListener("input", (event) => {
   ) {
     if (event.target.matches("input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']")) {
       updateFocusedMilestoneFromForm();
-      renderReportMilestoneRail();
-      renderWeekTimeline();
-      renderReportProjectBrief();
-      renderReportStatusPanel();
+      refreshMilestoneMaintenanceViews({ syncFields: false });
     }
     state.saveNotice = "";
   }

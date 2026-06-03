@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getAllowedProjectIdsForUser } from "./project-members.js";
 import { toPublicWeeklyReport } from "./report-records.js";
+import { buildBootstrapProjectPayload } from "./bootstrap-records.js";
 
 export async function getBootstrapPayload(user) {
   const allowedProjectIds = await getAllowedProjectIdsForUser(user);
@@ -62,10 +63,12 @@ export async function getBootstrapPayload(user) {
   ]);
 
   return {
-    projects: projects.map((project) => ({
-      ...project,
-      reports: project.reports.map((report) => toPublicWeeklyReport(report)),
-    })),
+    projects: projects.map((project) =>
+      buildBootstrapProjectPayload({
+        ...project,
+        reports: project.reports.map((report) => toPublicWeeklyReport(report)),
+      })
+    ),
     governanceTasks,
   };
 }

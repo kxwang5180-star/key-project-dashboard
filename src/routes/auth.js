@@ -2,7 +2,6 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { comparePassword, hashPassword, signScopedToken, signToken, buildAuthCookie, buildExpiredAuthCookie, verifyToken, normalizeEmail, canManageIdentity } from "../lib/auth.js";
 import { asyncRoute } from "../lib/async-route.js";
-import { chooseEffectiveProjectId } from "../lib/project-access.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { config } from "../config.js";
 import {
@@ -16,31 +15,13 @@ import {
 } from "../lib/feishu.js";
 import { ensureUserProjectMembershipLinks, getAllowedProjectIdsForUser } from "../services/project-members.js";
 import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/feishu-chat-sync.js";
+import { toPublicUser } from "../services/public-user.js";
 
 export const authRouter = Router();
 
 function isSystemBootstrapUser(user) {
   const email = normalizeEmail(user.email);
   return user.name === config.admin.name || email === normalizeEmail(config.admin.email) || email === "admin@example.com";
-}
-
-function toPublicUser(user, allowedProjectIds = []) {
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    roleKey: user.role,
-    defaultProjectId: user.defaultProjectId,
-    projectId: chooseEffectiveProjectId({
-      defaultProjectId: user.defaultProjectId,
-      allowedProjectIds,
-    }),
-    projectIds: allowedProjectIds,
-    avatarUrl: user.avatarUrl || null,
-    feishuLinked: Boolean(user.feishuOpenId || user.feishuUnionId),
-    canManageIdentity: canManageIdentity(user),
-  };
 }
 
 function ensureFeishuEnabled(res) {
@@ -79,7 +60,7 @@ authRouter.post("/register", asyncRoute(async (req, res) => {
   res.setHeader("Set-Cookie", buildAuthCookie(signToken(user)));
   res.status(201).json({
     token: signToken(user),
-    user: toPublicUser(user),
+    user: toPublicUser(user, [], { canManageIdentity }),
   });
 }));
 
@@ -98,7 +79,7 @@ authRouter.post("/login", asyncRoute(async (req, res) => {
   res.setHeader("Set-Cookie", buildAuthCookie(signToken(user)));
   res.json({
     token: signToken(user),
-    user: toPublicUser(user),
+    user: toPublicUser(user, [], { canManageIdentity }),
   });
 }));
 
@@ -201,7 +182,7 @@ authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
 authRouter.get("/me", authenticate, asyncRoute(async (req, res) => {
   await ensureUserProjectMembershipLinks(req.user);
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
-  res.json({ user: toPublicUser(req.user, allowedProjectIds) });
+  res.json({ user: toPublicUser(req.user, allowedProjectIds, { canManageIdentity }) });
 }));
 
 authRouter.get("/users", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
@@ -217,15 +198,22 @@ authRouter.get("/users", authenticate, requireRoles("ADMIN"), asyncRoute(async (
       role: true,
       defaultProjectId: true,
       avatarUrl: true,
+      feishuUserId: true,
       feishuOpenId: true,
       feishuUnionId: true,
       createdAt: true,
       updatedAt: true,
     },
   });
-  res.json({
-    users: users.filter((user) => !isSystemBootstrapUser(user)).map((user) => toPublicUser(user)),
-  });
+  const visibleUsers = users.filter((user) => !isSystemBootstrapUser(user));
+  const publicUsers = await Promise.all(
+    visibleUsers.map(async (user) => {
+      await ensureUserProjectMembershipLinks(user);
+      const allowedProjectIds = await getAllowedProjectIdsForUser(user);
+      return toPublicUser(user, allowedProjectIds, { canManageIdentity });
+    })
+  );
+  res.json({ users: publicUsers });
 }));
 
 authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
@@ -303,12 +291,13 @@ authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), asyncRoute(asy
       role: true,
       defaultProjectId: true,
       avatarUrl: true,
+      feishuUserId: true,
       feishuOpenId: true,
       feishuUnionId: true,
     },
   });
   res.json({
-    user: toPublicUser(user),
+    user: toPublicUser(user, await getAllowedProjectIdsForUser(user), { canManageIdentity }),
   });
 }));
 

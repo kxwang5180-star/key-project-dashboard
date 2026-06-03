@@ -24,3 +24,16 @@ export function buildFocusedMilestonePatch(formValues, fallback = {}) {
     status,
   };
 }
+
+export function getMilestoneCalendarSource({
+  projectId,
+  reportProjectId,
+  isManagingMilestones,
+  projectMilestones,
+  draftMilestones,
+}) {
+  if (isManagingMilestones && projectId === reportProjectId && Array.isArray(draftMilestones)) {
+    return draftMilestones;
+  }
+  return Array.isArray(projectMilestones) ? projectMilestones : [];
+}

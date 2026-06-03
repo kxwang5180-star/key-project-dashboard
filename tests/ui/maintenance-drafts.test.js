@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildFocusedMilestonePatch,
+  getMilestoneCalendarSource,
   updateMetricDraftField,
   updateMilestoneDraftField,
 } from "../../src/ui/maintenance-drafts.js";
@@ -46,5 +47,37 @@ test("buildFocusedMilestonePatch maps focused editor date and status", () => {
       dateKey: "2026-06-18",
       status: "in-progress",
     }
+  );
+});
+
+test("getMilestoneCalendarSource uses active draft while maintaining the report project", () => {
+  const official = [{ id: "ms1", title: "正式节点" }];
+  const draft = [{ id: "ms2", title: "草稿节点" }];
+
+  assert.equal(
+    getMilestoneCalendarSource({
+      projectId: "p1",
+      reportProjectId: "p1",
+      isManagingMilestones: true,
+      projectMilestones: official,
+      draftMilestones: draft,
+    }),
+    draft
+  );
+});
+
+test("getMilestoneCalendarSource falls back to official milestones outside active maintenance", () => {
+  const official = [{ id: "ms1", title: "正式节点" }];
+  const draft = [{ id: "ms2", title: "草稿节点" }];
+
+  assert.equal(
+    getMilestoneCalendarSource({
+      projectId: "p2",
+      reportProjectId: "p1",
+      isManagingMilestones: true,
+      projectMilestones: official,
+      draftMilestones: draft,
+    }),
+    official
   );
 });
