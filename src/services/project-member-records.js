@@ -1,0 +1,43 @@
+export function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+export function resolveMemberId(member, fallbackPrefix = "") {
+  const email = normalizeEmail(member.email);
+  return member.memberId || member.feishuUserId || member.feishuOpenId || email || `${fallbackPrefix}-${member.name || "member"}`;
+}
+
+export function buildProjectMemberRecord(member, { projectId, matchedUserId = null }) {
+  const memberId = resolveMemberId(member, projectId);
+  const email = normalizeEmail(member.email);
+  return {
+    projectId,
+    userId: matchedUserId || member.userId || null,
+    feishuUserId: member.feishuUserId || (/^ou_/.test(memberId) ? null : member.memberId || null),
+    feishuOpenId: member.feishuOpenId || (/^ou_/.test(memberId) ? memberId : null),
+    feishuUnionId: member.feishuUnionId || null,
+    memberId,
+    name: member.name || "未命名成员",
+    email: email || null,
+  };
+}
+
+export function buildFeishuChatMemberRecord(member, { chatId, matchedUserId = null }) {
+  const memberId = resolveMemberId(member, chatId);
+  const email = normalizeEmail(member.email);
+  return {
+    chatId,
+    memberId,
+    userId: matchedUserId || member.userId || null,
+    feishuUserId: member.feishuUserId || (/^ou_/.test(memberId) ? null : member.memberId || null),
+    feishuOpenId: member.feishuOpenId || (/^ou_/.test(memberId) ? memberId : null),
+    feishuUnionId: member.feishuUnionId || null,
+    name: member.name || "未命名成员",
+    email: email || null,
+    avatarUrl: member.avatarUrl || null,
+    raw: {
+      member: member.rawMember || member.raw?.member || null,
+      user: member.rawUser || member.raw?.user || null,
+    },
+  };
+}

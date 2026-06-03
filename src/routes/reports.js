@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { MilestoneStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { asyncRoute } from "../lib/async-route.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { canUserMaintainProject } from "../services/project-members.js";
 
@@ -8,7 +9,7 @@ export const reportRouter = Router();
 
 reportRouter.use(authenticate);
 
-reportRouter.post("/", async (req, res) => {
+reportRouter.post("/", asyncRoute(async (req, res) => {
   const {
     projectId,
     milestoneId = null,
@@ -46,4 +47,4 @@ reportRouter.post("/", async (req, res) => {
   });
 
   res.status(201).json(report);
-});
+}));

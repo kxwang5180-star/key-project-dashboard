@@ -1,3 +1,5 @@
+import { mergeChatMembers, renderChatMemberChips } from "./src/ui/chat-members.js";
+
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 const DEFAULT_MONTH = TODAY.getMonth() + 1;
@@ -368,6 +370,11 @@ async function syncMyFeishuChats() {
 async function loadFeishuChats() {
   const payload = await apiRequest("/api/auth/feishu/chats");
   authState.chats = payload.chats || [];
+}
+
+function getFeishuChatById(chatId) {
+  if (!chatId) return null;
+  return authState.chats.find((chat) => chat.chatId === chatId) || null;
 }
 
 function getReportableProjects() {
@@ -1891,27 +1898,32 @@ function renderAuthCenter() {
     </div>
     <div class="role-binding-list chat-binding-grid">
       ${projects
-        .map(
-          (project) => `
+        .map((project) => {
+          const chat = getFeishuChatById(project.feishuChatId);
+          const chatMembers = chat?.members || [];
+          return `
             <article class="binding-row project-chat-row" data-project-chat-row="${project.id}">
               <div class="binding-user">
                 <span class="identity-avatar is-small">${escapeHtml(project.shortName.slice(0, 1))}</span>
                 <div>
                   <strong>${escapeHtml(project.shortName)}</strong>
-                  <span>${escapeHtml(project.businessLine || "未填业务线")}</span>
+                  <span>${escapeHtml(chat?.name || project.businessLine || "未填业务线")}</span>
                 </div>
               </div>
               <label>
                 <span>群聊 chat_id</span>
                 <input data-project-chat-id="${project.id}" value="${escapeHtml(project.feishuChatId || "")}" placeholder="请选择群聊" readonly />
               </label>
+              <div class="project-chat-members">
+                ${renderChatMemberChips(chatMembers, { limit: 6 })}
+              </div>
               <div class="binding-actions">
                 <button class="secondary-action compact-action" type="button" data-open-chat-picker="${project.id}">选择群聊</button>
                 <button class="secondary-action compact-action" type="button" data-sync-project-chat="${project.id}">同步成员</button>
               </div>
             </article>
-          `
-        )
+          `;
+        })
         .join("")}
     </div>
   `;
@@ -1949,7 +1961,7 @@ function renderChatPickerModal() {
                       <div class="chat-option-main">
                         <strong>${escapeHtml(chat.name || chat.chatId)}</strong>
                         <span>${escapeHtml(chat.chatId)} · ${Number(chat.memberCount || chat.members?.length || 0)} 人</span>
-                        <p>${escapeHtml((chat.members || []).slice(0, 12).map((member) => member.name).filter(Boolean).join("、") || "暂无成员信息")}</p>
+                        ${renderChatMemberChips(chat.members || [], { limit: 12 })}
                       </div>
                       <button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}">选择</button>
                     </article>
@@ -2936,7 +2948,10 @@ document.addEventListener("click", (event) => {
     syncMyFeishuChats()
       .then((payload) => {
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败` : "";
-        authState.bindingError = `群聊列表已刷新：${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录${errorTip}。`;
+        const memberTip = payload.membersSynced
+          ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
+          : "，选择项目群聊后再同步该群成员";
+        authState.bindingError = `群聊列表已刷新：${payload.chatCount || 0} 个群聊${memberTip}。`;
         authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
         return loadFeishuChats();
       })
@@ -2959,6 +2974,7 @@ document.addEventListener("click", (event) => {
       .then((payload) => {
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
+        authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
         authState.bindingError = `已绑定群聊并同步 ${payload.members?.length || 0} 位成员。`;
         state.chatPickerOpen = false;
         render();
@@ -2978,7 +2994,10 @@ document.addEventListener("click", (event) => {
     syncMyFeishuChats()
       .then((payload) => {
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
-        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊、${payload.memberCount || 0} 条成员记录${errorTip}。`;
+        const memberTip = payload.membersSynced
+          ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
+          : "，选择项目群聊后再同步该群成员";
+        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊${memberTip}。`;
         authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
         return loadFeishuChats();
       })
@@ -3003,6 +3022,7 @@ document.addEventListener("click", (event) => {
       .then((payload) => {
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
+        authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
         authState.bindingError = `已同步 ${payload.members?.length || 0} 位群成员。`;
         return loadRoleBindings();
       })

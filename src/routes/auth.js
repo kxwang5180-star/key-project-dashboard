@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { comparePassword, hashPassword, signScopedToken, signToken, buildAuthCookie, buildExpiredAuthCookie, verifyToken } from "../lib/auth.js";
+import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { config } from "../config.js";
 import {
@@ -58,7 +59,7 @@ function ensureFeishuEnabled(res) {
   return false;
 }
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", asyncRoute(async (req, res) => {
   const { name, email, password, defaultProjectId = null } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ message: "姓名、邮箱、密码必填" });
@@ -89,9 +90,9 @@ authRouter.post("/register", async (req, res) => {
     token: signToken(user),
     user: toPublicUser(user),
   });
-});
+}));
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", asyncRoute(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ message: "邮箱和密码必填" });
@@ -108,9 +109,9 @@ authRouter.post("/login", async (req, res) => {
     token: signToken(user),
     user: toPublicUser(user),
   });
-});
+}));
 
-authRouter.get("/feishu/login", async (req, res) => {
+authRouter.get("/feishu/login", asyncRoute(async (req, res) => {
   if (!ensureFeishuEnabled(res)) return;
   const redirectPath = getSafeRedirectPath(req.query.redirect);
   const state = signScopedToken(
@@ -122,9 +123,9 @@ authRouter.get("/feishu/login", async (req, res) => {
   );
   const authorizeUrl = buildFeishuAuthorizeUrl(state);
   res.redirect(authorizeUrl);
-});
+}));
 
-authRouter.get("/feishu/callback", async (req, res) => {
+authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
   if (!ensureFeishuEnabled(res)) return;
 
   const { code, state, error, error_description: errorDescription } = req.query || {};
@@ -204,15 +205,15 @@ authRouter.get("/feishu/callback", async (req, res) => {
     });
     res.status(401).send(`飞书登录处理失败：${error.message}`);
   }
-});
+}));
 
-authRouter.get("/me", authenticate, async (req, res) => {
+authRouter.get("/me", authenticate, asyncRoute(async (req, res) => {
   await ensureUserProjectMembershipLinks(req.user);
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
   res.json({ user: toPublicUser(req.user, allowedProjectIds) });
-});
+}));
 
-authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (req, res) => {
+authRouter.get("/users", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以维护人员与项目群聊绑定" });
   }
@@ -234,14 +235,16 @@ authRouter.get("/users", authenticate, requireRoles("ADMIN"), async (req, res) =
   res.json({
     users: users.filter((user) => !isSystemBootstrapUser(user)).map((user) => toPublicUser(user)),
   });
-});
+}));
 
-authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), async (req, res) => {
+authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以同步飞书群聊" });
   }
   try {
-    const result = await syncMyFeishuChatsAndMembers(req.user.id);
+    const result = await syncMyFeishuChatsAndMembers(req.user.id, {
+      includeMembers: req.body?.includeMembers === true,
+    });
     res.json({
       ok: true,
       ...result,
@@ -256,9 +259,9 @@ authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), as
       message: `飞书群聊同步失败：${error.message}。请确认应用已开启机器人能力，FEISHU_SCOPES 包含 im:chat:read 和 im:chat.members:read，并重新飞书登录授权。`,
     });
   }
-});
+}));
 
-authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (req, res) => {
+authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以查看已同步群聊" });
   }
@@ -288,9 +291,9 @@ authRouter.get("/feishu/chats", authenticate, requireRoles("ADMIN"), async (req,
       members: chat.members,
     })),
   });
-});
+}));
 
-authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), async (req, res) => {
+authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以维护人员角色" });
   }
@@ -316,9 +319,9 @@ authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), async (req, re
   res.json({
     user: toPublicUser(user),
   });
-});
+}));
 
-authRouter.post("/logout", async (_req, res) => {
+authRouter.post("/logout", asyncRoute(async (_req, res) => {
   res.setHeader("Set-Cookie", buildExpiredAuthCookie());
   res.json({ ok: true });
-});
+}));

@@ -1,9 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { fetchFeishuChatMemberNames } from "../lib/feishu.js";
-
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
+import { buildFeishuChatMemberRecord, buildProjectMemberRecord, normalizeEmail, resolveMemberId } from "./project-member-records.js";
 
 export async function getAllowedProjectIdsForUser(user) {
   if (!user) return [];
@@ -56,7 +53,7 @@ export async function ensureUserProjectMembershipLinks(user) {
   });
 }
 
-export async function syncProjectMembersFromFeishuChat(projectId, chatId) {
+async function fetchStoredOrLiveChatMembers(chatId) {
   const storedMembers = await prisma.feishuChatMember.findMany({
     where: { chatId },
     select: {
@@ -69,19 +66,34 @@ export async function syncProjectMembersFromFeishuChat(projectId, chatId) {
       userId: true,
     },
   });
-  const members = storedMembers.length
-    ? storedMembers
-    : await fetchFeishuChatMemberNames(chatId, {
+  if (storedMembers.length) return storedMembers;
+
+  const errors = [];
+  for (const memberIdType of ["user_id", "open_id"]) {
+    try {
+      const members = await fetchFeishuChatMemberNames(chatId, {
         ignoreUserDetailErrors: true,
-        memberIdType: "user_id",
+        memberIdType,
       });
+      if (members.length) return members;
+    } catch (error) {
+      errors.push(`${memberIdType}: ${error.message}`);
+    }
+  }
+
+  if (errors.length) throw new Error(errors.join("；"));
+  return [];
+}
+
+export async function syncProjectMembersFromFeishuChat(projectId, chatId) {
+  const members = await fetchStoredOrLiveChatMembers(chatId);
 
   await prisma.project.update({
     where: { id: projectId },
     data: { feishuChatId: chatId },
   });
 
-  const activeMemberIds = members.map((member) => member.memberId).filter(Boolean);
+  const activeMemberIds = members.map((member) => resolveMemberId(member, projectId)).filter(Boolean);
 
   await prisma.$transaction(async (tx) => {
     if (activeMemberIds.length) {
@@ -91,54 +103,86 @@ export async function syncProjectMembersFromFeishuChat(projectId, chatId) {
           memberId: { notIn: activeMemberIds },
         },
       });
+      await tx.feishuChatMember.deleteMany({
+        where: {
+          chatId,
+          memberId: { notIn: activeMemberIds },
+        },
+      });
     }
 
     for (const member of members) {
       const email = normalizeEmail(member.email);
-      const resolvedMemberId = member.memberId || email || `${projectId}-${member.name}`;
       const matchedUser = member.userId
         ? { id: member.userId }
         : await tx.user.findFirst({
-        where: {
-          OR: [
-            member.memberId ? { feishuUserId: member.memberId } : undefined,
-            member.feishuUserId ? { feishuUserId: member.feishuUserId } : undefined,
-            member.feishuOpenId ? { feishuOpenId: member.feishuOpenId } : undefined,
-            member.feishuUnionId ? { feishuUnionId: member.feishuUnionId } : undefined,
-            email ? { email } : undefined,
-          ].filter(Boolean),
-        },
-        select: { id: true },
+            where: {
+              OR: [
+                member.memberId ? { feishuUserId: member.memberId } : undefined,
+                member.feishuUserId ? { feishuUserId: member.feishuUserId } : undefined,
+                member.feishuOpenId ? { feishuOpenId: member.feishuOpenId } : undefined,
+                member.feishuUnionId ? { feishuUnionId: member.feishuUnionId } : undefined,
+                email ? { email } : undefined,
+              ].filter(Boolean),
+            },
+            select: { id: true },
+          });
+      const projectMemberRecord = buildProjectMemberRecord(member, {
+        projectId,
+        matchedUserId: matchedUser?.id || null,
+      });
+      const chatMemberRecord = buildFeishuChatMemberRecord(member, {
+        chatId,
+        matchedUserId: matchedUser?.id || null,
       });
 
       await tx.projectMember.upsert({
         where: {
           projectId_memberId: {
             projectId,
-            memberId: resolvedMemberId,
+            memberId: projectMemberRecord.memberId,
           },
         },
         update: {
-          userId: matchedUser?.id || null,
-          feishuUserId: member.feishuUserId || member.memberId || null,
-          feishuOpenId: member.feishuOpenId || null,
-          feishuUnionId: member.feishuUnionId || null,
-          memberId: resolvedMemberId,
-          name: member.name || "未命名成员",
-          email: email || null,
+          userId: projectMemberRecord.userId,
+          feishuUserId: projectMemberRecord.feishuUserId,
+          feishuOpenId: projectMemberRecord.feishuOpenId,
+          feishuUnionId: projectMemberRecord.feishuUnionId,
+          memberId: projectMemberRecord.memberId,
+          name: projectMemberRecord.name,
+          email: projectMemberRecord.email,
         },
-        create: {
-          projectId,
-          userId: matchedUser?.id || null,
-          feishuUserId: member.feishuUserId || member.memberId || null,
-          feishuOpenId: member.feishuOpenId || null,
-          feishuUnionId: member.feishuUnionId || null,
-          memberId: resolvedMemberId,
-          name: member.name || "未命名成员",
-          email: email || null,
+        create: projectMemberRecord,
+      });
+
+      await tx.feishuChatMember.upsert({
+        where: {
+          chatId_memberId: {
+            chatId,
+            memberId: chatMemberRecord.memberId,
+          },
         },
+        update: {
+          userId: chatMemberRecord.userId,
+          feishuUserId: chatMemberRecord.feishuUserId,
+          feishuOpenId: chatMemberRecord.feishuOpenId,
+          feishuUnionId: chatMemberRecord.feishuUnionId,
+          name: chatMemberRecord.name,
+          email: chatMemberRecord.email,
+          avatarUrl: chatMemberRecord.avatarUrl,
+          raw: chatMemberRecord.raw,
+        },
+        create: chatMemberRecord,
       });
     }
+
+    await tx.feishuChat.updateMany({
+      where: { chatId },
+      data: {
+        memberCount: members.length,
+        lastSyncedAt: new Date(),
+      },
+    });
   });
 
   return members;

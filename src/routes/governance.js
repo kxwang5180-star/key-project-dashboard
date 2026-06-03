@@ -1,20 +1,21 @@
 import { GovernanceLevel, GovernanceStatus } from "@prisma/client";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 
 export const governanceRouter = Router();
 
 governanceRouter.use(authenticate);
 
-governanceRouter.get("/", async (_req, res) => {
+governanceRouter.get("/", asyncRoute(async (_req, res) => {
   const tasks = await prisma.governanceTask.findMany({
     orderBy: [{ status: "asc" }, { level: "desc" }, { createdAt: "desc" }],
   });
   res.json(tasks);
-});
+}));
 
-governanceRouter.post("/", requireRoles("ADMIN"), async (req, res) => {
+governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   const { projectId, taskType, title, detail, level = GovernanceLevel.MEDIUM, ownerName = null } = req.body || {};
   if (!projectId || !taskType || !title || !detail) {
     return res.status(400).json({ message: "项目、类型、标题、详情必填" });
@@ -30,9 +31,9 @@ governanceRouter.post("/", requireRoles("ADMIN"), async (req, res) => {
     },
   });
   res.status(201).json(task);
-});
+}));
 
-governanceRouter.put("/:id", requireRoles("ADMIN"), async (req, res) => {
+governanceRouter.put("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   const { status, ownerName } = req.body || {};
   const task = await prisma.governanceTask.update({
     where: { id: req.params.id },
@@ -42,4 +43,4 @@ governanceRouter.put("/:id", requireRoles("ADMIN"), async (req, res) => {
     },
   });
   res.json(task);
-});
+}));

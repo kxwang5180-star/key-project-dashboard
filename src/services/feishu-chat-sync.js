@@ -6,9 +6,9 @@ import {
   fetchTenantAccessToken,
   refreshFeishuUserAccessToken,
 } from "../lib/feishu.js";
-import { buildEmptyMemberSyncWarning } from "./feishu-chat-sync-diagnostics.js";
+import { buildChatMemberCountUpdate, buildEmptyMemberSyncWarning } from "./feishu-chat-sync-diagnostics.js";
 
-export { buildEmptyMemberSyncWarning };
+export { buildChatMemberCountUpdate, buildEmptyMemberSyncWarning };
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -122,9 +122,11 @@ async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAcces
   return emptyResult || { members: [], memberIdType: "user_id", source: "empty" };
 }
 
-export async function syncMyFeishuChatsAndMembers(userId) {
+export async function syncMyFeishuChatsAndMembers(userId, options = {}) {
   const userAccessToken = await getValidUserAccessToken(userId);
-  const [tenantAccessToken, chats] = await Promise.all([fetchTenantAccessToken(), fetchFeishuUserChats(userAccessToken)]);
+  const includeMembers = options.includeMembers === true;
+  const chats = await fetchFeishuUserChats(userAccessToken);
+  const tenantAccessToken = includeMembers ? await fetchTenantAccessToken() : null;
   let memberTotal = 0;
   const errors = [];
 
@@ -133,33 +135,45 @@ export async function syncMyFeishuChatsAndMembers(userId) {
     if (!chatId) continue;
 
     let members = [];
-    let memberSource = "";
-    try {
-      const result = await fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken);
-      members = result.members;
-      memberSource = result.source;
-      if (!members.length) {
-        errors.push(
-          buildEmptyMemberSyncWarning({
-            chatId,
-            chatName: chat.name || chatId,
-            source: result.source,
-            memberIdType: result.memberIdType,
-          })
-        );
+    let memberSource = includeMembers ? "" : "chat-list-only";
+    if (includeMembers) {
+      try {
+        const result = await fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken);
+        members = result.members;
+        memberSource = result.source;
+        if (!members.length) {
+          errors.push(
+            buildEmptyMemberSyncWarning({
+              chatId,
+              chatName: chat.name || chatId,
+              source: result.source,
+              memberIdType: result.memberIdType,
+            })
+          );
+        }
+      } catch (error) {
+        errors.push({
+          chatId,
+          name: chat.name || chatId,
+          message: error.message,
+        });
       }
-    } catch (error) {
-      errors.push({
-        chatId,
-        name: chat.name || chatId,
-        message: error.message,
-      });
     }
     const resolvedMembers = [];
     for (const member of members) {
       resolvedMembers.push(await resolveChatMember(member, tenantAccessToken));
     }
     memberTotal += resolvedMembers.length;
+    const existingChat = await prisma.feishuChat.findUnique({
+      where: { chatId },
+      select: { memberCount: true },
+    });
+    const memberCountUpdate = buildChatMemberCountUpdate({
+      existingMemberCount: existingChat?.memberCount || 0,
+      resolvedMemberCount: resolvedMembers.length,
+      chatMemberCount: chat.member_count || chat.memberCount || 0,
+      includeMembers,
+    });
 
     await prisma.$transaction(async (tx) => {
       await tx.feishuChat.upsert({
@@ -168,7 +182,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           name: chat.name || chatId,
           description: chat.description || null,
           ownerUserId: userId,
-          memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
+          memberCount: memberCountUpdate.memberCount,
           lastSyncedAt: new Date(),
           raw: { chat, memberSource },
         },
@@ -177,7 +191,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
           name: chat.name || chatId,
           description: chat.description || null,
           ownerUserId: userId,
-          memberCount: resolvedMembers.length || Number(chat.member_count || chat.memberCount || 0),
+          memberCount: memberCountUpdate.memberCount,
           lastSyncedAt: new Date(),
           raw: { chat, memberSource },
         },
@@ -232,6 +246,7 @@ export async function syncMyFeishuChatsAndMembers(userId) {
   return {
     chatCount: chats.length,
     memberCount: memberTotal,
+    membersSynced: includeMembers,
     errorCount: errors.length,
     errors,
   };

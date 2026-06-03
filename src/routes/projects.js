@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { MilestoneStatus, ProjectStage } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { asyncRoute } from "../lib/async-route.js";
 import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
@@ -23,7 +24,7 @@ function canManageIdentity(user) {
   );
 }
 
-projectRouter.get("/", async (req, res) => {
+projectRouter.get("/", asyncRoute(async (req, res) => {
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
   const projects = await prisma.project.findMany({
     where: req.user.role === "ADMIN" ? undefined : { id: { in: allowedProjectIds } },
@@ -41,9 +42,9 @@ projectRouter.get("/", async (req, res) => {
     },
   });
   res.json(projects);
-});
+}));
 
-projectRouter.put("/:id/chat", requireRoles("ADMIN"), async (req, res) => {
+projectRouter.put("/:id/chat", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以绑定项目群聊" });
   }
@@ -62,9 +63,9 @@ projectRouter.put("/:id/chat", requireRoles("ADMIN"), async (req, res) => {
     },
   });
   res.json({ project });
-});
+}));
 
-projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), async (req, res) => {
+projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以同步项目群成员" });
   }
@@ -87,9 +88,9 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), async (req, res) => 
       email: member.email,
     })),
   });
-});
+}));
 
-projectRouter.put("/:id/brief", async (req, res) => {
+projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
   if (!(await canUserMaintainProject(req.user, req.params.id))) {
     return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
   }
@@ -104,9 +105,9 @@ projectRouter.put("/:id/brief", async (req, res) => {
     },
   });
   res.json(project);
-});
+}));
 
-projectRouter.put("/:id/metrics", async (req, res) => {
+projectRouter.put("/:id/metrics", asyncRoute(async (req, res) => {
   if (!(await canUserMaintainProject(req.user, req.params.id))) {
     return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
   }
@@ -127,9 +128,9 @@ projectRouter.put("/:id/metrics", async (req, res) => {
     });
   });
   res.json({ ok: true });
-});
+}));
 
-projectRouter.put("/:id/milestones", async (req, res) => {
+projectRouter.put("/:id/milestones", asyncRoute(async (req, res) => {
   if (!(await canUserMaintainProject(req.user, req.params.id))) {
     return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
   }
@@ -154,4 +155,4 @@ projectRouter.put("/:id/milestones", async (req, res) => {
     });
   });
   res.json({ ok: true });
-});
+}));

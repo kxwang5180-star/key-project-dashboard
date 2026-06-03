@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "check": "for f in src/routes/*.js src/services/*.js src/lib/*.js src/middleware/*.js src/app.js src/server.js app.js src/ui/*.js; do node --check \"$f\" || exit 1; done",
+    "test": "node --test tests/*.test.js tests/**/*.test.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
