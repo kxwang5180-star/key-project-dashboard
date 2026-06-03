@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { comparePassword, hashPassword, signScopedToken, signToken, buildAuthCookie, buildExpiredAuthCookie, verifyToken } from "../lib/auth.js";
+import { comparePassword, hashPassword, signScopedToken, signToken, buildAuthCookie, buildExpiredAuthCookie, verifyToken, normalizeEmail, canManageIdentity } from "../lib/auth.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { chooseEffectiveProjectId } from "../lib/project-access.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
@@ -18,20 +18,6 @@ import { ensureUserProjectMembershipLinks, getAllowedProjectIdsForUser } from ".
 import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/feishu-chat-sync.js";
 
 export const authRouter = Router();
-
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
-
-function canManageIdentity(user) {
-  if (user?.role !== "ADMIN") return false;
-  const email = normalizeEmail(user.email);
-  const name = String(user.name || "").trim();
-  return Boolean(
-    (email && config.feishu.identityAdminEmails.includes(email)) ||
-      (name && config.feishu.identityAdminNames.includes(name))
-  );
-}
 
 function isSystemBootstrapUser(user) {
   const email = normalizeEmail(user.email);

@@ -6,13 +6,11 @@ test("getMemberAvatarText uses the last two characters of a Chinese name", () =>
   assert.equal(getMemberAvatarText("王康旭"), "康旭");
 });
 
-test("renderChatMemberChips renders avatar text and member names", () => {
+test("renderChatMemberChips renders name chips without avatars", () => {
   const html = renderChatMemberChips([{ name: "王康旭" }, { name: "赵长硕" }]);
 
-  assert.match(html, /<span class="chat-member-avatar">康旭<\/span>/);
-  assert.match(html, /<span class="chat-member-name">王康旭<\/span>/);
-  assert.match(html, /<span class="chat-member-avatar">长硕<\/span>/);
-  assert.match(html, /<span class="chat-member-name">赵长硕<\/span>/);
+  assert.match(html, /<span class="chat-member-chip"[^>]*>王康旭<\/span>/);
+  assert.match(html, /<span class="chat-member-chip"[^>]*>赵长硕<\/span>/);
 });
 
 test("renderChatMemberChips renders an empty state for missing members", () => {

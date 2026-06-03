@@ -1,3 +1,4 @@
+import { normalizeEmail } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import {
   fetchFeishuChatMembers,
@@ -13,10 +14,6 @@ import {
 } from "./feishu-chat-sync-diagnostics.js";
 
 export { buildChatMemberCountUpdate, buildChatMemberFetchAttempts, buildEmptyMemberSyncWarning };
-
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
 
 function getTokenExpiresAt(tokenData) {
   const expiresIn = Number(tokenData.expires_in || tokenData.expiresIn || 0);
@@ -194,7 +191,7 @@ export async function syncMyFeishuChatsAndMembers(userId, options = {}) {
         update: {
           name: chat.name || chatId,
           description: chat.description || null,
-          ownerUserId: userId,
+          discoveredBy: { connect: { id: userId } },
           memberCount: memberCountUpdate.memberCount,
           lastSyncedAt: new Date(),
           raw: { chat, memberSource },
@@ -203,7 +200,7 @@ export async function syncMyFeishuChatsAndMembers(userId, options = {}) {
           chatId,
           name: chat.name || chatId,
           description: chat.description || null,
-          ownerUserId: userId,
+          discoveredBy: { connect: { id: userId } },
           memberCount: memberCountUpdate.memberCount,
           lastSyncedAt: new Date(),
           raw: { chat, memberSource },

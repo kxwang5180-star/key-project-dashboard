@@ -4,26 +4,13 @@ import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
+import { canManageIdentity } from "../lib/auth.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
 import { toPublicProjectBrief } from "../services/project-records.js";
 
 export const projectRouter = Router();
 
 projectRouter.use(authenticate);
-
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
-
-function canManageIdentity(user) {
-  if (user?.role !== "ADMIN") return false;
-  const email = normalizeEmail(user.email);
-  const name = String(user.name || "").trim();
-  return Boolean(
-    (email && config.feishu.identityAdminEmails.includes(email)) ||
-      (name && config.feishu.identityAdminNames.includes(name))
-  );
-}
 
 projectRouter.get("/", asyncRoute(async (req, res) => {
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);

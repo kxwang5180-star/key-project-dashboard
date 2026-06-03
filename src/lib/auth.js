@@ -75,3 +75,17 @@ export function buildExpiredAuthCookie() {
   if (config.cookieSecure) parts.push("Secure");
   return parts.join("; ");
 }
+
+export function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+export function canManageIdentity(user) {
+  if (user?.role !== "ADMIN") return false;
+  const email = normalizeEmail(user.email);
+  const name = String(user.name || "").trim();
+  return Boolean(
+    (email && config.feishu.identityAdminEmails.includes(email)) ||
+      (name && config.feishu.identityAdminNames.includes(name))
+  );
+}

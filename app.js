@@ -93,7 +93,6 @@ const filters = [
   { key: "normal", label: "正常" },
   { key: "watch", label: "关注" },
   { key: "risk", label: "风险" },
-  { key: "delayed", label: "逾期" },
 ];
 
 const statusMap = {
@@ -734,8 +733,9 @@ function serializeMilestone(milestone) {
 }
 
 function normalizeMilestone(project, milestone, index = 0) {
-  const dateInfo = milestone.dateKey
-    ? parseDateFromText(milestone.dateKey) || makeDateInfo(...milestone.dateKey.split("-").map(Number))
+  const rawParts = milestone.dateKey ? milestone.dateKey.split("-").map(Number) : [];
+  const dateInfo = rawParts.length === 3 && rawParts.every((n) => !Number.isNaN(n))
+    ? parseDateFromText(milestone.dateKey) || makeDateInfo(...rawParts)
     : null;
   const title = String(milestone.title || "").trim() || "未命名里程碑";
   return {
@@ -1005,9 +1005,6 @@ function getFilteredProjects() {
     result = result.filter((project) => (project.businessLine || "未填业务线") === state.businessLine);
   }
   if (state.filter === "all") return result;
-  if (state.filter === "delayed") {
-    return result.filter((project) => project.milestones.some((milestone) => milestone.status === "risk"));
-  }
   return result.filter((project) => project.status === state.filter);
 }
 
@@ -2013,7 +2010,7 @@ function renderChatPickerModal() {
                     <article class="chat-option">
                       <div class="chat-option-main">
                         <strong>${escapeHtml(chat.name || chat.chatId)}</strong>
-                        <span>${escapeHtml(chat.chatId)} · ${Number(chat.memberCount || chat.members?.length || 0)} 人</span>
+                        <span>${Number(chat.memberCount || chat.members?.length || 0)} 人</span>
                         ${renderChatMemberChips(chat.members || [], { limit: 12 })}
                       </div>
                       <button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}">选择</button>
@@ -2880,14 +2877,15 @@ document.addEventListener("click", async (event) => {
   if (logoutButton) {
     apiRequest("/api/auth/logout", { method: "POST" })
       .catch(() => null)
-      .finally(async () => {
+      .finally(() => {
         memberProfile = null;
         authState.users = [];
         authState.error = "";
         state.currentView = "register";
         window.location.hash = getViewHash(state.currentView);
-        await loadCurrentUser();
-        render();
+        loadCurrentUser()
+          .catch(() => null)
+          .finally(() => render());
       });
     return;
   }

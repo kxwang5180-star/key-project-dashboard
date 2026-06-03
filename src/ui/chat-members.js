@@ -35,10 +35,7 @@ export function renderChatMemberChips(members, options = {}) {
       ${visibleMembers
         .map(
           (member) => `
-            <span class="chat-member-chip" title="${escapeHtml(member.name)}">
-              <span class="chat-member-avatar">${escapeHtml(getMemberAvatarText(member.name))}</span>
-              <span class="chat-member-name">${escapeHtml(member.name)}</span>
-            </span>
+            <span class="chat-member-chip" title="${escapeHtml(member.name)}">${escapeHtml(member.name)}</span>
           `
         )
         .join("")}
