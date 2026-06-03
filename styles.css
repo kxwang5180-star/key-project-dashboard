@@ -1171,7 +1171,7 @@ h3 {
 
 .detail-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 14px;
   padding: 5px;
@@ -2979,6 +2979,13 @@ button:disabled {
     rgba(255, 255, 255, 0.78);
 }
 
+.report-status-card.is-attention {
+  border-color: rgba(234, 179, 8, 0.32);
+  background:
+    linear-gradient(145deg, rgba(234, 179, 8, 0.1), rgba(255, 255, 255, 0.72)),
+    rgba(255, 255, 255, 0.78);
+}
+
 .status-orbit {
   display: inline-grid;
   place-items: center;
@@ -3138,6 +3145,33 @@ button:disabled {
 .metric-visual-card.is-number,
 .metric-visual-card.is-qualitative {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.metric-visual-card.is-target {
+  border-color: color-mix(in srgb, var(--project-color, var(--blue)) 28%, var(--line));
+}
+
+.metric-visual-card.is-target-only {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--project-color, var(--blue)) 14%, var(--line));
+  opacity: 0.72;
+}
+
+.metric-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.milestone-change-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .metric-ring-large {

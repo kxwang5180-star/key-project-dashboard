@@ -41,7 +41,11 @@ export function createApp() {
     });
   });
 
-  app.use(express.static(rootDir));
+  app.use("/index.html", express.static(path.join(rootDir, "index.html")));
+  app.use("/styles.css", express.static(path.join(rootDir, "styles.css")));
+  app.use("/app.js", express.static(path.join(rootDir, "app.js")));
+  app.use("/data.js", express.static(path.join(rootDir, "data.js")));
+  app.use("/src", express.static(path.join(rootDir, "src")));
 
   app.get("*", (_req, res) => {
     res.sendFile(path.join(rootDir, "index.html"));

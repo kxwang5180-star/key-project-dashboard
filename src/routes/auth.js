@@ -55,13 +55,14 @@ authRouter.post("/register", asyncRoute(async (req, res) => {
     return res.status(400).json({ message: "姓名、邮箱、密码必填" });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return res.status(409).json({ message: "该邮箱已注册" });
 
   const user = await prisma.user.create({
     data: {
       name: String(name).trim(),
-      email: String(email).trim().toLowerCase(),
+      email: normalizedEmail,
       passwordHash: await hashPassword(String(password)),
       role: "MEMBER",
       defaultProjectId,

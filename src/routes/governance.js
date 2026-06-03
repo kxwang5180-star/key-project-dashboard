@@ -3,13 +3,16 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
+import { getAllowedProjectIdsForUser } from "../services/project-members.js";
 
 export const governanceRouter = Router();
 
 governanceRouter.use(authenticate);
 
-governanceRouter.get("/", asyncRoute(async (_req, res) => {
+governanceRouter.get("/", asyncRoute(async (req, res) => {
+  const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
   const tasks = await prisma.governanceTask.findMany({
+    where: req.user.role === "ADMIN" ? undefined : { projectId: { in: allowedProjectIds } },
     orderBy: [{ status: "asc" }, { level: "desc" }, { createdAt: "desc" }],
   });
   res.json(tasks);

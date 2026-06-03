@@ -41,8 +41,9 @@ function toIsoDate(value) {
 }
 
 function toIsoDateTime(value) {
-  const date = value instanceof Date ? value : new Date(value || Date.now());
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  if (!value) return new Date().toISOString();
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
 export function buildRiskFromReport({ projectId, riskSummary, ownerName }) {
@@ -66,7 +67,8 @@ export function buildMilestoneUpdateFromReport(milestone, report) {
   const oldStatus = milestone.status || "PLANNED";
   const nextTitle = String(report.milestoneTitle || oldTitle).trim() || oldTitle;
   const nextDateKey = String(report.milestoneDate || oldDate).trim();
-  const nextDueDate = nextDateKey ? new Date(`${nextDateKey}T00:00:00.000Z`) : null;
+  let nextDueDate = nextDateKey ? new Date(`${nextDateKey}T00:00:00.000Z`) : null;
+  if (nextDueDate && Number.isNaN(nextDueDate.getTime())) nextDueDate = null;
   const nextDate = toIsoDate(nextDueDate);
   const nextStatus = normalizeMilestoneState(report.milestoneState) || oldStatus;
   const changedParts = [];

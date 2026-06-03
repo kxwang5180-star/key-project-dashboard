@@ -55,7 +55,7 @@ export async function getValidUserAccessToken(userId) {
 
 async function resolveChatMember(member, tenantAccessToken) {
   const memberId = member.member_id || member.user_id || member.open_id || "";
-  const memberIdType = member.open_id || /^ou_/.test(memberId) ? "open_id" : "user_id";
+  const memberIdType = (member.open_id || /^ou_/.test(memberId)) ? "open_id" : "user_id";
   let contactUser = null;
   if (memberId) {
     try {

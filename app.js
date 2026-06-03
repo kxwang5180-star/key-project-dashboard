@@ -39,7 +39,35 @@ const state = {
 };
 
 const sourceRows = Array.isArray(window.PROJECT_SOURCE) ? window.PROJECT_SOURCE : [];
-let projectMaintenance = JSON.parse(localStorage.getItem("project-dashboard-maintenance") || "{}");
+let projectMaintenance = loadProjectMaintenance();
+
+function safeLocalStorageGet(key, fallback = null) {
+  try { const raw = localStorage.getItem(key); return raw != null ? JSON.parse(raw) : fallback; }
+  catch { return fallback; }
+}
+
+function safeLocalStorageSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota exceeded or private mode */ }
+}
+
+function loadProjectMaintenance() {
+  const data = safeLocalStorageGet("project-dashboard-maintenance", {});
+  return Object.fromEntries(Object.entries(data || {}).map(([projectId, entry]) => {
+    if (!entry || typeof entry !== "object") return [projectId, entry];
+    if (Array.isArray(entry.milestones)) {
+      entry.milestones = entry.milestones.map((milestone) => ({
+        ...milestone,
+        status: migrateMilestoneStatus(String(milestone.status || "")),
+      }));
+    }
+    return [projectId, entry];
+  }));
+}
+
+function migrateMilestoneStatus(status) {
+  const oldToNew = { done: "completed", doing: "in-progress", due: "upcoming", risk: "overdue" };
+  return oldToNew[status] || status;
+}
 let memberProfile = null;
 let submissions = [];
 const authState = {
@@ -102,18 +130,18 @@ const statusMap = {
 };
 
 const milestoneStatusMap = {
-  done: "已完成",
-  doing: "进行中",
-  due: "临近",
-  risk: "逾期",
+  completed: "已完成",
+  "in-progress": "进行中",
+  upcoming: "临近",
+  overdue: "逾期",
   changed: "变更",
   planned: "计划中",
 };
 
 const editableMilestoneStatusMap = {
   planned: "计划中",
-  doing: "进行中",
-  done: "已完成",
+  "in-progress": "进行中",
+  completed: "已完成",
   changed: "变更",
 };
 
@@ -564,8 +592,8 @@ function deriveProgress(row, milestones) {
   }
 
   if (!milestones.length) return 20;
-  const completed = milestones.filter((milestone) => milestone.status === "done").length;
-  const doing = milestones.filter((milestone) => milestone.status === "doing").length;
+  const completed = milestones.filter((milestone) => milestone.status === "completed").length;
+  const doing = milestones.filter((milestone) => milestone.status === "in-progress").length;
   return Math.min(95, Math.max(18, Math.round(((completed + doing * 0.5) / milestones.length) * 100)));
 }
 
@@ -589,7 +617,7 @@ function deriveRiskItems(row, milestones) {
     });
   }
 
-  const delayed = milestones.filter((milestone) => milestone.status === "risk");
+  const delayed = milestones.filter((milestone) => milestone.status === "overdue");
   if (delayed.length) {
     risks.push({
       level: "medium",
@@ -615,7 +643,7 @@ function deriveRiskItems(row, milestones) {
 function deriveStatus(row, milestones, risks) {
   const openRisks = risks.filter((risk) => risk.status !== "closed");
   if (openRisks.some((risk) => risk.level === "high")) return "risk";
-  if (milestones.some((milestone) => milestone.status === "risk")) return "risk";
+  if (milestones.some((milestone) => milestone.status === "overdue")) return "risk";
   if (openRisks.length || row.established !== "是") return "watch";
   return "normal";
 }
@@ -782,7 +810,7 @@ function getProjectMaintenance(projectId) {
 }
 
 function persistProjectMaintenance() {
-  localStorage.setItem("project-dashboard-maintenance", JSON.stringify(projectMaintenance));
+  safeLocalStorageSet("project-dashboard-maintenance", projectMaintenance);
 }
 
 function getProjectMetricItems(project) {
@@ -1085,7 +1113,7 @@ function renderSummary() {
   );
   const riskProjects = filtered.filter((project) => project.status === "risk").length;
   const watchProjects = filtered.filter((project) => project.status !== "normal").length;
-  const delayed = allMilestones.filter((milestone) => milestone.status === "risk").length;
+  const delayed = allMilestones.filter((milestone) => milestone.status === "overdue").length;
   const missingWeeklyUpdate = filtered.filter((project) => !getCurrentWeekSubmission(project.id)).length;
   const metricGaps = filtered.filter((project) => {
     const metrics = getProjectMetricItems(project);
@@ -1105,7 +1133,7 @@ function renderSummary() {
     {
       label: `${state.calendarMonth}月里程碑`,
       value: monthMilestones.length,
-      helper: `${monthMilestones.filter((m) => m.status === "done").length} 个已完成 · ${delayed} 个待确认`,
+      helper: `${monthMilestones.filter((m) => m.status === "completed").length} 个已完成 · ${delayed} 个待确认`,
       tone: "amber",
       icon: "◷",
     },
@@ -1152,7 +1180,7 @@ function getDashboardAttentionItems() {
 
   getFilteredProjects().forEach((project) => {
     const riskMilestone = project.milestones
-      .filter((milestone) => milestone.status === "risk")
+      .filter((milestone) => milestone.status === "overdue")
       .sort((a, b) => (a.dateInfo?.date?.getTime() || 0) - (b.dateInfo?.date?.getTime() || 0))[0];
     if (riskMilestone) {
       items.push({
@@ -2652,7 +2680,7 @@ function getGovernanceItems() {
           detail: milestone.title,
         });
       }
-      if (milestone.status === "risk") {
+      if (milestone.status === "overdue") {
         items.push({
           level: "high",
           type: "逾期治理",
@@ -2998,6 +3026,7 @@ document.addEventListener("click", async (event) => {
     renderChatPickerModal();
     syncMyFeishuChats()
       .then((payload) => {
+        if (!payload) { authState.bindingError = "群聊列表刷新失败，请检查服务状态。"; return; }
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败` : "";
         const memberTip = payload.membersSynced
           ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
@@ -3044,6 +3073,7 @@ document.addEventListener("click", async (event) => {
     renderAuthCenter();
     syncMyFeishuChats()
       .then((payload) => {
+        if (!payload) { authState.bindingError = "群聊同步失败，请检查飞书授权和网络状态。"; return; }
         const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
         const memberTip = payload.membersSynced
           ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
@@ -3071,6 +3101,7 @@ document.addEventListener("click", async (event) => {
     const chatId = document.querySelector(`[data-project-chat-id="${projectId}"]`)?.value || "";
     syncProjectChatMembers(projectId, chatId)
       .then((payload) => {
+        if (!payload) { authState.bindingError = "群成员同步失败，请重试。"; return; }
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
         authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
@@ -3136,7 +3167,7 @@ document.addEventListener("click", async (event) => {
     renderMemberWorkspace();
     try {
       const payload = await saveProjectBrief(project, brief);
-      applyProjectBrief(project, payload.brief || brief);
+      applyProjectBrief(project, payload?.brief || brief);
       resetBriefDraft(project.id);
       state.briefEditMode = false;
       state.saveNotice = "项目概览已保存。";
@@ -3277,6 +3308,7 @@ document.addEventListener("click", async (event) => {
         renderDetail();
         renderGovernance();
         renderReportStatusPanel();
+        renderSummary();
       });
     return;
   }
@@ -3343,6 +3375,7 @@ document.addEventListener("click", async (event) => {
         renderCalendar();
         renderDetail();
         renderReportStatusPanel();
+        renderSummary();
       });
     return;
   }
@@ -3534,7 +3567,9 @@ document.addEventListener("compositionend", (event) => {
   }
 });
 
-document.querySelector("#memberReportForm").addEventListener("input", (event) => {
+const memberReportForm = document.querySelector("#memberReportForm");
+if (memberReportForm) {
+memberReportForm.addEventListener("input", (event) => {
   if (
     event.target.matches(
       "textarea[name='progress'], textarea[name='risk'], input[name='milestoneTitle'], input[name='milestoneDate'], select[name='milestoneStatus']"
@@ -3544,7 +3579,7 @@ document.querySelector("#memberReportForm").addEventListener("input", (event) =>
   }
 });
 
-document.querySelector("#memberReportForm").addEventListener("submit", async (event) => {
+memberReportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!memberProfile) {
     state.currentView = "register";
@@ -3609,6 +3644,7 @@ document.querySelector("#memberReportForm").addEventListener("submit", async (ev
     renderMemberWorkspace();
   }
 });
+}
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMilestoneModal();

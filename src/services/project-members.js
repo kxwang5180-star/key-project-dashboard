@@ -77,14 +77,14 @@ async function fetchStoredOrLiveChatMembers(chatId, options = {}) {
 export async function syncProjectMembersFromFeishuChat(projectId, chatId, options = {}) {
   const members = await fetchStoredOrLiveChatMembers(chatId, options);
 
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { feishuChatId: chatId },
-  });
-
   const activeMemberIds = members.map((member) => resolveMemberId(member, projectId)).filter(Boolean);
 
   await prisma.$transaction(async (tx) => {
+    await tx.project.update({
+      where: { id: projectId },
+      data: { feishuChatId: chatId },
+    });
+
     if (activeMemberIds.length) {
       await tx.projectMember.deleteMany({
         where: {
