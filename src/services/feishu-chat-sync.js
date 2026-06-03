@@ -6,6 +6,9 @@ import {
   fetchTenantAccessToken,
   refreshFeishuUserAccessToken,
 } from "../lib/feishu.js";
+import { buildEmptyMemberSyncWarning } from "./feishu-chat-sync-diagnostics.js";
+
+export { buildEmptyMemberSyncWarning };
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -101,6 +104,7 @@ async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAcces
     { token: tenantAccessToken, memberIdType: "user_id", label: "tenant:user_id" },
   ];
   const errors = [];
+  let emptyResult = null;
 
   for (const attempt of attempts) {
     try {
@@ -108,13 +112,14 @@ async function fetchChatMembersWithFallback(chatId, userAccessToken, tenantAcces
         memberIdType: attempt.memberIdType,
       });
       if (members.length) return { members, memberIdType: attempt.memberIdType, source: attempt.label };
+      emptyResult = { members, memberIdType: attempt.memberIdType, source: attempt.label };
     } catch (error) {
       errors.push(`${attempt.label}: ${error.message}`);
     }
   }
 
   if (errors.length) throw new Error(errors.join("；"));
-  return { members: [], memberIdType: "user_id", source: "empty" };
+  return emptyResult || { members: [], memberIdType: "user_id", source: "empty" };
 }
 
 export async function syncMyFeishuChatsAndMembers(userId) {
@@ -133,6 +138,16 @@ export async function syncMyFeishuChatsAndMembers(userId) {
       const result = await fetchChatMembersWithFallback(chatId, userAccessToken, tenantAccessToken);
       members = result.members;
       memberSource = result.source;
+      if (!members.length) {
+        errors.push(
+          buildEmptyMemberSyncWarning({
+            chatId,
+            chatName: chat.name || chatId,
+            source: result.source,
+            memberIdType: result.memberIdType,
+          })
+        );
+      }
     } catch (error) {
       errors.push({
         chatId,

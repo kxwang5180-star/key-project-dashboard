@@ -1849,7 +1849,7 @@ function renderAuthCenter() {
       ${groupEntries
         .map(
           ({ project, users }) => {
-            const isExpanded = state.expandedProjectGroups[project.id] === true;
+            const isExpanded = state.expandedProjectGroups[project.id] !== false;
             const arrow = isExpanded ? "▾" : "▸";
             return `
               <article class="project-group-card ${isExpanded ? "is-expanded" : ""}" data-project-group="${project.id}">
@@ -2848,7 +2848,8 @@ document.addEventListener("click", (event) => {
   const toggleProjectGroupButton = event.target.closest("[data-toggle-project-group]");
   if (toggleProjectGroupButton) {
     const groupId = toggleProjectGroupButton.dataset.toggleProjectGroup;
-    state.expandedProjectGroups[groupId] = state.expandedProjectGroups[groupId] === false ? true : state.expandedProjectGroups[groupId] === true ? false : false;
+    const isExpanded = state.expandedProjectGroups[groupId] !== false;
+    state.expandedProjectGroups[groupId] = !isExpanded;
     renderAuthCenter();
     return;
   }
