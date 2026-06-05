@@ -19,6 +19,33 @@ export function buildUserProjectMemberConditions(user) {
   ].filter(Boolean);
 }
 
+export function chooseChatMemberSyncMembers({ storedMembers = [], liveMembers = [], preferLive = false } = {}) {
+  const stored = Array.isArray(storedMembers) ? storedMembers : [];
+  const live = Array.isArray(liveMembers) ? liveMembers : [];
+
+  if (preferLive && live.length) {
+    return {
+      members: live,
+      source: "live",
+      shouldWrite: true,
+    };
+  }
+
+  if (stored.length) {
+    return {
+      members: stored,
+      source: "stored",
+      shouldWrite: false,
+    };
+  }
+
+  return {
+    members: live,
+    source: "live",
+    shouldWrite: true,
+  };
+}
+
 export function buildProjectMemberRecord(member, { projectId, matchedUserId = null }) {
   const memberId = resolveMemberId(member, projectId);
   const email = normalizeEmail(member.email);

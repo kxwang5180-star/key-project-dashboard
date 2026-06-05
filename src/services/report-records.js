@@ -116,6 +116,16 @@ export function buildMilestoneUpdateFromReport(milestone, report) {
   };
 }
 
+export function buildWeeklyReportDeleteAuditDetail(report) {
+  return {
+    projectId: report.projectId,
+    weekNumber: report.weekNumber,
+    authorId: report.authorId,
+    hasRisk: Boolean(report.riskSummary),
+    progressPreview: String(report.progress || "").slice(0, 80),
+  };
+}
+
 export function toPublicWeeklyReport(report) {
   return {
     id: report.id,

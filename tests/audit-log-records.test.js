@@ -52,8 +52,8 @@ test("buildUserRoleAuditDetail records identity role and project changes", () =>
 
 test("buildProjectChatAuditDetail records chat and member sync context", () => {
   assert.deepEqual(
-    buildProjectChatAuditDetail({ chatId: "oc_1", memberCount: 12 }),
-    { chatId: "oc_1", memberCount: 12 }
+    buildProjectChatAuditDetail({ chatId: "oc_1", memberCount: 12, memberSource: "live" }),
+    { chatId: "oc_1", memberCount: 12, memberSource: "live" }
   );
 });
 

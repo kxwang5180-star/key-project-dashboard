@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatProjectStageLabel,
+  getLatestProjectReport,
   getMilestoneReportPreview,
+  getNearestMilestone,
   getVisibleCalendarEvents,
   getWeekRangeSummary,
 } from "../../src/ui/report-experience.js";
@@ -56,4 +59,35 @@ test("getMilestoneReportPreview filters reports by milestone and supports collap
       isExpanded: false,
     }
   );
+});
+
+test("getNearestMilestone returns the dated milestone closest to today", () => {
+  const nearest = getNearestMilestone(
+    [
+      { id: "m1", title: "较远节点", dateInfo: { date: new Date("2026-06-30T00:00:00") } },
+      { id: "m2", title: "最近节点", dateInfo: { date: new Date("2026-06-06T00:00:00") } },
+      { id: "m3", title: "未标日期" },
+    ],
+    new Date("2026-06-05T00:00:00")
+  );
+
+  assert.equal(nearest.id, "m2");
+});
+
+test("getLatestProjectReport returns the newest weekly report for a project", () => {
+  const latest = getLatestProjectReport(
+    [
+      { id: "r1", projectId: "p1", week: 5, createdAt: "2026-06-01T00:00:00.000Z" },
+      { id: "r2", projectId: "p2", week: 6, createdAt: "2026-06-04T00:00:00.000Z" },
+      { id: "r3", projectId: "p1", week: 6, createdAt: "2026-06-03T00:00:00.000Z" },
+    ],
+    "p1"
+  );
+
+  assert.equal(latest.id, "r3");
+});
+
+test("formatProjectStageLabel hides raw enum stage labels", () => {
+  assert.equal(formatProjectStageLabel("IN_PROGRESS"), "推进中");
+  assert.equal(formatProjectStageLabel("PLANNED"), "计划中");
 });

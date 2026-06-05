@@ -15,10 +15,11 @@ export function buildUserRoleAuditDetail({ role, defaultProjectId = null }) {
   };
 }
 
-export function buildProjectChatAuditDetail({ chatId, memberCount = null }) {
+export function buildProjectChatAuditDetail({ chatId, memberCount = null, memberSource = null }) {
   return {
     chatId: String(chatId || "").trim(),
     memberCount: memberCount == null ? null : Number(memberCount),
+    memberSource: memberSource == null ? null : String(memberSource || "").trim() || null,
   };
 }
 

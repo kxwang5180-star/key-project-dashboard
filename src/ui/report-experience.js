@@ -56,3 +56,39 @@ export function getMilestoneReportPreview(
     isExpanded: Boolean(expanded),
   };
 }
+
+export function getNearestMilestone(milestones, now = new Date()) {
+  const source = Array.isArray(milestones) ? milestones : [];
+  const dated = source.filter((milestone) => milestone?.dateInfo?.date);
+  if (dated.length) {
+    return [...dated].sort((a, b) => {
+      const aDistance = Math.abs(a.dateInfo.date - now);
+      const bDistance = Math.abs(b.dateInfo.date - now);
+      if (aDistance !== bDistance) return aDistance - bDistance;
+      return a.dateInfo.date - b.dateInfo.date;
+    })[0];
+  }
+  return source[0] || null;
+}
+
+export function getLatestProjectReport(reports, projectId) {
+  return (Array.isArray(reports) ? reports : [])
+    .filter((report) => report.projectId === projectId)
+    .sort((a, b) => {
+      const createdDiff = new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      if (createdDiff) return createdDiff;
+      return (Number(b.week) || 0) - (Number(a.week) || 0);
+    })[0] || null;
+}
+
+export function formatProjectStageLabel(stage) {
+  const labels = {
+    PLANNED: "计划中",
+    IN_PROGRESS: "推进中",
+    COMPLETED: "已完成",
+    PAUSED: "暂停",
+    CANCELLED: "已取消",
+  };
+  const value = String(stage || "").trim();
+  return labels[value] || labels[value.toUpperCase()] || value || "未填写";
+}

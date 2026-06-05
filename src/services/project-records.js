@@ -1,8 +1,10 @@
 export function toPublicProjectBrief(project) {
   return {
     id: project.id,
+    businessLine: project.businessLine || "",
     owner: project.ownerName || "未填写",
     overview: project.description || "",
+    teamSummary: project.teamSummary || "",
     stage: project.stage || "PLANNED",
     changeSummary: project.changeSummary || "",
   };
@@ -11,14 +13,18 @@ export function toPublicProjectBrief(project) {
 export function buildProjectBriefUpdatePayload(brief) {
   return {
     ownerName: String(brief?.owner || "").trim(),
+    businessLine: String(brief?.businessLine || "").trim(),
     description: String(brief?.overview || "").trim(),
+    teamSummary: String(brief?.teamSummary || "").trim(),
   };
 }
 
 export function applyProjectBriefSnapshot(project, brief) {
   if (!project || !brief) return project;
   project.owner = String(brief.owner || "").trim() || project.owner || "未填写";
+  project.businessLine = String(brief.businessLine || "").trim() || project.businessLine || "未填业务线";
   project.overallText = String(brief.overview || "").trim() || project.overallText || "";
+  project.teamText = String(brief.teamSummary || brief.teamText || "").trim() || project.teamText || "";
   if (brief.stage) project.stage = brief.stage;
   return project;
 }

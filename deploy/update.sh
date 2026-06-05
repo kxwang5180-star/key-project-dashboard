@@ -11,16 +11,19 @@ cd "$APP_DIR"
 echo "[2/6] Pulling latest code"
 git pull origin main
 
-echo "[3/6] Installing dependencies"
-npm install
+echo "[3/7] Installing dependencies"
+npm ci
 
-echo "[4/6] Generating Prisma client"
+echo "[4/7] Running preflight checks"
+npm run preflight -- --skip-http
+
+echo "[5/7] Generating Prisma client"
 npm run prisma:generate
 
-echo "[5/6] Syncing database schema"
+echo "[6/7] Syncing database schema"
 npx prisma db push
 
-echo "[6/6] Reloading PM2 process"
+echo "[7/7] Reloading PM2 process"
 pm2 reload "$PM2_APP_NAME" --update-env
 
 echo "Running health check"

@@ -71,6 +71,20 @@ export function checkRuntimeDependencies(dependencies = {}, options = {}) {
   };
 }
 
+export function checkDependencyLockfile(options = {}) {
+  const exists = options.exists || (() => false);
+  const lockfiles = ["package-lock.json", "npm-shrinkwrap.json"];
+  const lockfile = lockfiles.find((path) => exists(path));
+  return {
+    name: "dependency-lockfile",
+    ok: Boolean(lockfile),
+    lockfile: lockfile || "",
+    message: lockfile
+      ? `依赖锁文件已存在：${lockfile}`
+      : "缺少依赖锁文件。请执行 npm install --package-lock-only 并提交 package-lock.json，确保部署依赖可复现",
+  };
+}
+
 export function buildJsonApiCheck(path, response) {
   const contentType = String(response.contentType || "").toLowerCase();
   const isJson = contentType.includes("application/json");

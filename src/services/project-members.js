@@ -5,6 +5,7 @@ import {
   buildFeishuChatMemberRecord,
   buildProjectMemberRecord,
   buildUserProjectMemberConditions,
+  chooseChatMemberSyncMembers,
   normalizeEmail,
   resolveMemberId,
 } from "./project-member-records.js";
@@ -68,14 +69,27 @@ async function fetchStoredOrLiveChatMembers(chatId, options = {}) {
       userId: true,
     },
   });
-  if (storedMembers.length) return storedMembers;
 
-  const result = await fetchAndResolveFeishuChatMembers(chatId, options.userId);
-  return result.members;
+  if (!options.userId) return chooseChatMemberSyncMembers({ storedMembers });
+
+  let liveMembers = [];
+  try {
+    const result = await fetchAndResolveFeishuChatMembers(chatId, options.userId);
+    liveMembers = result.members;
+  } catch (error) {
+    if (!storedMembers.length) throw error;
+  }
+
+  return chooseChatMemberSyncMembers({
+    storedMembers,
+    liveMembers,
+    preferLive: true,
+  });
 }
 
 export async function syncProjectMembersFromFeishuChat(projectId, chatId, options = {}) {
-  const members = await fetchStoredOrLiveChatMembers(chatId, options);
+  const syncResult = await fetchStoredOrLiveChatMembers(chatId, options);
+  const members = syncResult.members;
 
   const activeMemberIds = members.map((member) => resolveMemberId(member, projectId)).filter(Boolean);
 
@@ -174,5 +188,9 @@ export async function syncProjectMembersFromFeishuChat(projectId, chatId, option
     });
   });
 
-  return members;
+  return {
+    members,
+    source: syncResult.source,
+    refreshed: syncResult.shouldWrite,
+  };
 }

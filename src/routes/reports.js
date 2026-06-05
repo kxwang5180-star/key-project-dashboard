@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
-import { authenticate } from "../middleware/authenticate.js";
+import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser } from "../services/project-members.js";
+import { writeAuditLog } from "../services/audit-log.js";
 import {
   buildMilestoneUpdateFromReport,
   buildRiskFromReport,
+  buildWeeklyReportDeleteAuditDetail,
   hasMeaningfulReportProgress,
   normalizeMilestoneState,
   normalizeReportWeekNumber,
@@ -36,6 +38,35 @@ reportRouter.get("/", asyncRoute(async (req, res) => {
   });
 
   res.json({ reports: reports.map((report) => toPublicWeeklyReport(report)) });
+}));
+
+reportRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+  const report = await prisma.weeklyReport.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true,
+      projectId: true,
+      weekNumber: true,
+      authorId: true,
+      progress: true,
+      riskSummary: true,
+    },
+  });
+  if (!report) return res.status(404).json({ message: "填报记录不存在或已删除" });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.weeklyReport.delete({ where: { id: report.id } });
+    await writeAuditLog({
+      client: tx,
+      userId: req.user.id,
+      action: "weekly.report.delete",
+      targetType: "WeeklyReport",
+      targetId: report.id,
+      detail: buildWeeklyReportDeleteAuditDetail(report),
+    });
+  });
+
+  res.json({ ok: true, deletedId: report.id });
 }));
 
 reportRouter.post("/", asyncRoute(async (req, res) => {

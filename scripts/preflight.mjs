@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
   DEFAULT_API_PATHS,
+  checkDependencyLockfile,
   checkRuntimeDependencies,
   checkRequiredEnv,
   checkUrl,
@@ -77,6 +78,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
   const checks = [
+    checkDependencyLockfile({ exists: existsSync }),
     checkRuntimeDependencies(packageJson.dependencies || {}, {
       resolvePackage: (name) => require.resolve(`${name}/package.json`),
     }),

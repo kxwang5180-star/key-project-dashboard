@@ -74,13 +74,14 @@ COOKIE_SECURE="true"
 ## 6. 安装依赖与建表
 
 ```bash
-npm install
+npm ci
 npm run prisma:generate
 npx prisma db push
 npm run seed
 ```
 
 说明：
+- 如果仓库中还没有 `package-lock.json`，先在可信环境执行 `npm install --package-lock-only` 并提交锁文件
 - `prisma db push` 会按 `prisma/schema.prisma` 同步当前表结构
 - `seed` 会把当前 [data.js](/Users/kk/Documents/Codex/2026-05-27/ai-ai-ai/data.js) 的项目数据导入 MySQL
 - 当前这套 RDS 权限模型不适合在服务器上直接使用 `prisma migrate dev`
@@ -174,7 +175,7 @@ docker run -d \
   key-project-dashboard
 ```
 
-镜像构建会先安装完整依赖，执行 `npm run prisma:generate` 生成 Prisma Client，再裁剪开发依赖。构建前建议先执行：
+镜像构建会使用 `npm ci` 按锁文件安装完整依赖，执行 `npm run prisma:generate` 生成 Prisma Client，再裁剪开发依赖。构建前建议先执行：
 
 ```bash
 npm run preflight -- --skip-http

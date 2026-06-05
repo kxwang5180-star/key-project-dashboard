@@ -3,22 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>重点项目治理</title>
+    <title>项目看板 重点项目驾驶舱</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">项目治理</p>
-          <h1>重点项目治理</h1>
+          <p class="eyebrow">项目看板</p>
+          <h1>项目看板 重点项目驾驶舱</h1>
         </div>
         <div class="topbar-actions">
           <nav class="view-switch" aria-label="页面切换">
             <button class="view-button is-active" type="button" data-view="dashboard">管理看板</button>
             <button class="view-button" type="button" data-view="calendar">里程碑日历</button>
             <button class="view-button" type="button" data-view="report">项目维护</button>
-            <button class="view-button" type="button" data-view="governance">PMO治理</button>
+            <button class="view-button" type="button" data-view="governance">项目巡查</button>
           </nav>
           <button class="profile-entry" type="button" data-view="register">身份与权限</button>
           <span class="date-chip" id="todayLabel">2026年5月</span>
@@ -40,19 +40,6 @@
               <div class="attention-list" id="attentionList"></div>
             </section>
 
-            <section class="toolbar" aria-label="项目筛选">
-              <div>
-                <h2>项目清单</h2>
-                <p>按业务线、关注状态和关键里程碑快速定位项目</p>
-              </div>
-              <div class="toolbar-controls">
-                <label class="select-field">
-                  <span>业务线</span>
-                  <select id="businessLineFilter"></select>
-                </label>
-                <div class="segmented-control" id="filterTabs"></div>
-              </div>
-            </section>
           </section>
 
           <section class="dashboard-layout">
@@ -63,6 +50,13 @@
                     <h2>重点项目</h2>
                     <p id="projectCountText"></p>
                   </div>
+                  <div class="toolbar-controls project-panel-tools">
+                    <label class="select-field">
+                      <span>业务线</span>
+                      <select id="businessLineFilter"></select>
+                    </label>
+                    <div class="segmented-control" id="filterTabs"></div>
+                  </div>
                 </div>
                 <div class="project-list" id="projectList"></div>
               </section>
@@ -70,15 +64,6 @@
 
             <aside class="side-column">
               <section class="panel detail-panel" id="projectDetail"></section>
-              <section class="panel risk-panel">
-                <div class="panel-header">
-                  <div>
-                    <h2>风险提示</h2>
-                    <p>需要管理层关注的问题</p>
-                  </div>
-                </div>
-                <div id="riskList" class="risk-list"></div>
-              </section>
             </aside>
           </section>
 
@@ -150,7 +135,6 @@
                 <div class="panel-header">
                   <div>
                     <h2>项目概览</h2>
-                    <p>随项目选择自动更新</p>
                   </div>
                 </div>
                 <div id="reportProjectBrief" class="report-brief"></div>
@@ -275,9 +259,9 @@
           <section class="governance-layout">
             <section class="panel governance-hero">
               <div>
-                <p class="eyebrow">PMO治理</p>
-                <h2>把项目管理从“看进展”推进到“管质量”</h2>
-                <p>集中识别未更新、缺指标、缺里程碑日期、逾期和风险未闭环事项，帮助 PMO 快速追踪问题项目。</p>
+                <p class="eyebrow">项目巡查</p>
+                <h2>巡查待办</h2>
+                <p>集中识别未更新、缺指标、缺日期、逾期和风险未闭环事项。</p>
               </div>
               <div id="governanceSummary" class="governance-summary"></div>
             </section>
@@ -285,7 +269,7 @@
             <section class="panel governance-panel">
               <div class="panel-header">
                 <div>
-                  <h2>治理待办</h2>
+                  <h2>巡查清单</h2>
                   <p id="governanceListMeta">点击事项可定位到对应项目</p>
                 </div>
               </div>

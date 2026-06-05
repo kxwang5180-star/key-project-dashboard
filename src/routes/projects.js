@@ -84,19 +84,22 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
   const selection = resolveProjectChatSelection({ project, requestedChatId, chat });
   if (!selection.ok) return res.status(selection.status).json({ message: selection.message });
 
-  const members = await syncProjectMembersFromFeishuChat(req.params.id, selection.chatId, {
+  const syncResult = await syncProjectMembersFromFeishuChat(req.params.id, selection.chatId, {
     userId: req.user.id,
   });
+  const members = syncResult.members || [];
   await writeAuditLog({
     userId: req.user.id,
     action: "project.chat.members.sync",
     targetType: "Project",
     targetId: req.params.id,
-    detail: buildProjectChatAuditDetail({ chatId: selection.chatId, memberCount: members.length }),
+    detail: buildProjectChatAuditDetail({ chatId: selection.chatId, memberCount: members.length, memberSource: syncResult.source }),
   });
   res.json({
     ok: true,
     chatId: selection.chatId,
+    memberSource: syncResult.source,
+    refreshed: syncResult.refreshed,
     members: members.map((member) => ({
       memberId: member.memberId,
       name: member.name,
@@ -109,12 +112,14 @@ projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
   if (!(await canUserMaintainProject(req.user, req.params.id))) {
     return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
   }
-  const { ownerName, description, stage, changeSummary } = req.body || {};
+  const { ownerName, businessLine, description, teamSummary, stage, changeSummary } = req.body || {};
   const project = await prisma.project.update({
     where: { id: req.params.id },
     data: {
       ownerName: ownerName ?? undefined,
+      businessLine: businessLine ?? undefined,
       description: description ?? undefined,
+      teamSummary: teamSummary ?? undefined,
       stage: stage && Object.values(ProjectStage).includes(stage) ? stage : undefined,
       changeSummary: changeSummary ?? undefined,
     },
@@ -126,7 +131,9 @@ projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
     targetId: req.params.id,
     detail: {
       ownerName: ownerName ?? null,
+      businessLine: businessLine ?? null,
       hasDescription: description !== undefined,
+      hasTeamSummary: teamSummary !== undefined,
       stage: stage || null,
     },
   });

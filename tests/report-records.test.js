@@ -4,6 +4,7 @@ import {
   buildMilestoneUpdateFromReport,
   toPublicProjectReportState,
   buildRiskFromReport,
+  buildWeeklyReportDeleteAuditDetail,
   hasMeaningfulReportProgress,
   normalizeMilestoneState,
   parseReportMilestoneDate,
@@ -43,6 +44,22 @@ test("toPublicWeeklyReport maps database weekly report to frontend submission sh
     milestoneStatus: "planned",
     createdAt: "2026-06-03T02:00:00.000Z",
   });
+});
+
+test("buildWeeklyReportDeleteAuditDetail keeps deletion audit compact", () => {
+  const detail = buildWeeklyReportDeleteAuditDetail({
+    projectId: "project_1",
+    weekNumber: 6,
+    authorId: "user_1",
+    riskSummary: "需要协调接口权限",
+    progress: "本周完成联调，进入试运行。".repeat(8),
+  });
+
+  assert.equal(detail.projectId, "project_1");
+  assert.equal(detail.weekNumber, 6);
+  assert.equal(detail.authorId, "user_1");
+  assert.equal(detail.hasRisk, true);
+  assert.equal(detail.progressPreview.length, 80);
 });
 
 test("normalizeMilestoneState accepts frontend status keys", () => {

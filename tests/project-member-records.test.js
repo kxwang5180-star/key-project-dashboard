@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildFeishuChatMemberRecord,
   buildProjectMemberRecord,
+  chooseChatMemberSyncMembers,
   buildUserProjectMemberConditions,
 } from "../src/services/project-member-records.js";
 
@@ -88,4 +89,32 @@ test("buildUserProjectMemberConditions builds stable permission matching conditi
 
 test("buildUserProjectMemberConditions omits empty identity fields", () => {
   assert.deepEqual(buildUserProjectMemberConditions({ email: " " }), []);
+});
+
+test("chooseChatMemberSyncMembers prefers fresh live members when available", () => {
+  const result = chooseChatMemberSyncMembers({
+    storedMembers: [{ memberId: "old", name: "旧成员" }],
+    liveMembers: [{ memberId: "new", name: "新成员" }],
+    preferLive: true,
+  });
+
+  assert.deepEqual(result, {
+    members: [{ memberId: "new", name: "新成员" }],
+    source: "live",
+    shouldWrite: true,
+  });
+});
+
+test("chooseChatMemberSyncMembers keeps cached members when live sync returns empty", () => {
+  const result = chooseChatMemberSyncMembers({
+    storedMembers: [{ memberId: "old", name: "旧成员" }],
+    liveMembers: [],
+    preferLive: true,
+  });
+
+  assert.deepEqual(result, {
+    members: [{ memberId: "old", name: "旧成员" }],
+    source: "stored",
+    shouldWrite: false,
+  });
 });

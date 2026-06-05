@@ -14,15 +14,19 @@ test("toPublicProjectBrief maps persisted project brief to frontend shape", () =
   assert.deepEqual(
     toPublicProjectBrief({
       id: "project_1",
+      businessLine: "信息技术部",
       ownerName: "王康旭",
       description: "项目目标和范围",
+      teamSummary: "业务负责人：张三；产品负责人：李四",
       stage: "IN_PROGRESS",
       changeSummary: "负责人调整",
     }),
     {
       id: "project_1",
+      businessLine: "信息技术部",
       owner: "王康旭",
       overview: "项目目标和范围",
+      teamSummary: "业务负责人：张三；产品负责人：李四",
       stage: "IN_PROGRESS",
       changeSummary: "负责人调整",
     }
@@ -33,11 +37,15 @@ test("buildProjectBriefUpdatePayload maps frontend brief draft to persisted fiel
   assert.deepEqual(
     buildProjectBriefUpdatePayload({
       owner: "  王康旭  ",
+      businessLine: "  信息技术部  ",
       overview: "  项目目标和范围  ",
+      teamSummary: "  业务负责人：张三；产品负责人：李四  ",
     }),
     {
       ownerName: "王康旭",
+      businessLine: "信息技术部",
       description: "项目目标和范围",
+      teamSummary: "业务负责人：张三；产品负责人：李四",
     }
   );
 });
@@ -45,15 +53,19 @@ test("buildProjectBriefUpdatePayload maps frontend brief draft to persisted fiel
 test("applyProjectBriefSnapshot updates project fields from server brief", () => {
   const project = {
     id: "project_1",
+    businessLine: "旧业务线",
     owner: "旧负责人",
     overallText: "旧概览",
+    teamText: "旧项目组",
     stage: "PLANNED",
   };
 
   assert.equal(
     applyProjectBriefSnapshot(project, {
       owner: "王康旭",
+      businessLine: "信息技术部",
       overview: "项目目标和范围",
+      teamSummary: "业务负责人：张三；产品负责人：李四",
       stage: "IN_PROGRESS",
     }),
     project
@@ -61,8 +73,10 @@ test("applyProjectBriefSnapshot updates project fields from server brief", () =>
 
   assert.deepEqual(project, {
     id: "project_1",
+    businessLine: "信息技术部",
     owner: "王康旭",
     overallText: "项目目标和范围",
+    teamText: "业务负责人：张三；产品负责人：李四",
     stage: "IN_PROGRESS",
   });
 });

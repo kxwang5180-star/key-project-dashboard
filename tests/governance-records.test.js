@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildGovernanceTaskPersistencePlan,
+  buildGovernanceTaskIdentity,
   buildGovernanceItemKey,
   normalizeGovernanceLevel,
   normalizeGovernanceStatus,
@@ -33,6 +35,37 @@ test("buildGovernanceItemKey matches generated items and persisted tasks", () =>
     }),
     "project_1|风险治理|风险缺少责任人|接口联调风险"
   );
+});
+
+test("buildGovernanceTaskIdentity normalizes duplicate governance task fields", () => {
+  assert.deepEqual(
+    buildGovernanceTaskIdentity({
+      projectId: " project_1 ",
+      taskType: " 指标治理 ",
+      title: " 项目指标仍需结构化 ",
+      detail: " 建议补充指标名称 ",
+    }),
+    {
+      projectId: "project_1",
+      taskType: "指标治理",
+      title: "项目指标仍需结构化",
+      detail: "建议补充指标名称",
+    }
+  );
+});
+
+test("buildGovernanceTaskPersistencePlan chooses update for duplicate tasks", () => {
+  assert.deepEqual(buildGovernanceTaskPersistencePlan({ existingTask: { id: "task_1" } }), {
+    mode: "update",
+    statusCode: 200,
+    auditAction: "governance.task.upsert",
+  });
+
+  assert.deepEqual(buildGovernanceTaskPersistencePlan({ existingTask: null }), {
+    mode: "create",
+    statusCode: 201,
+    auditAction: "governance.task.create",
+  });
 });
 
 test("toClientGovernanceResolution maps persisted task to frontend resolution", () => {

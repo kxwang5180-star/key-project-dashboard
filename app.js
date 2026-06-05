@@ -14,7 +14,10 @@ import {
   updateMilestoneDraftField,
 } from "./src/ui/maintenance-drafts.js";
 import {
+  formatProjectStageLabel,
+  getLatestProjectReport,
   getMilestoneReportPreview,
+  getNearestMilestone,
   getVisibleCalendarEvents,
   getWeekRangeSummary,
 } from "./src/ui/report-experience.js";
@@ -561,9 +564,23 @@ async function saveWeeklyReport(report) {
   return payload;
 }
 
+async function deleteWeeklyReport(reportId) {
+  return apiRequest(`/api/reports/${encodeURIComponent(reportId)}`, {
+    method: "DELETE",
+  });
+}
+
 function getFeishuChatById(chatId) {
   if (!chatId) return null;
   return authState.chats.find((chat) => chat.chatId === chatId) || null;
+}
+
+function formatProjectMemberSyncMessage(payload, prefix = "已同步") {
+  const count = payload?.members?.length || 0;
+  if (payload?.memberSource === "stored" && payload?.refreshed === false) {
+    return `飞书未返回新的成员数据，已保留 ${count} 位缓存成员。`;
+  }
+  return `${prefix} ${count} 位群成员。`;
 }
 
 function applyProjectReportState(projectState) {
@@ -955,12 +972,15 @@ function getProjectMetricItems(project) {
 function getProjectBriefData(project) {
   return {
     owner: String(project.owner || "未填写").trim(),
+    businessLine: String(project.businessLine || "未填业务线").trim(),
     overview: String(project.overallText || "").trim(),
+    teamSummary: String(project.teamText || "").trim(),
   };
 }
 
 function applyProjectBrief(project, brief) {
   applyProjectBriefSnapshot(project, brief);
+  project.team = parseTeam(project.teamText);
   delete getProjectMaintenance(project.id).brief;
   persistProjectMaintenance();
 }
@@ -1236,16 +1256,7 @@ function getFilteredProjects() {
 }
 
 function getNextMilestone(project) {
-  const dated = project.milestones.filter((milestone) => milestone.dateInfo);
-  if (dated.length) {
-    return [...dated].sort((a, b) => {
-      const aDistance = Math.abs(a.dateInfo.date - TODAY);
-      const bDistance = Math.abs(b.dateInfo.date - TODAY);
-      if (aDistance !== bDistance) return aDistance - bDistance;
-      return a.dateInfo.date - b.dateInfo.date;
-    })[0];
-  }
-  return project.milestones[0];
+  return getNearestMilestone(project?.milestones || [], TODAY);
 }
 
 function getCalendarLabel() {
@@ -1323,9 +1334,7 @@ function renderSummary() {
     {
       label: "重点项目数",
       value: filtered.length,
-      helper: `${new Set(filtered.map((project) => project.businessLine)).size} 条业务线 · ${
-        filtered.filter((project) => project.established !== "是").length
-      } 个未立项`,
+      helper: `${new Set(filtered.map((project) => project.businessLine)).size} 条业务线 · ${filtered.length} 个项目纳入看板`,
       tone: "blue",
       icon: "◇",
     },
@@ -1509,7 +1518,7 @@ function renderProjectList() {
         ? projectMetrics.map((item) => `${item.name}${item.current || "待填"}`).join("，")
         : compactText(project.metricsText, 64);
       const hoverNode = next
-        ? `${next.dateInfo?.label || "未标日期"} · ${milestoneStatusMap[next.status]} · ${next.title}`
+        ? `${next.dateInfo?.label || "未标日期"} · ${next.title}`
         : "暂无可识别节点";
 
       return `
@@ -1518,14 +1527,13 @@ function renderProjectList() {
       }" style="--project-color: ${project.color}">
           <span class="project-name">
             <strong>${escapeHtml(project.shortName)}</strong>
-            <span>${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(project.stage)}</span>
+            <span>${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(formatProjectStageLabel(project.stage))}</span>
             <span class="owner-line">负责人 ${escapeHtml(project.owner)}</span>
           </span>
           <span class="project-meta">
             <span class="status-pill ${status.className} has-tip" data-tip="${escapeHtml(
         riskTip
       )}">${status.label}</span>
-            <span class="phase-pill">${project.established === "是" ? "已立项" : "未立项"}</span>
             <span class="update-pill ${currentWeekSubmission ? "is-done" : "is-missing"} has-tip" data-tip="${escapeHtml(updateTip)}">${
         currentWeekSubmission ? "本周已更" : "待更新"
       }</span>
@@ -1533,9 +1541,7 @@ function renderProjectList() {
           <span class="project-meta">
             <span>当前关键节点</span>
             <strong>${escapeHtml(next?.title || "暂无节点")}</strong>
-            <span>${escapeHtml(next?.dateInfo?.label || "未标日期")} · ${
-        milestoneStatusMap[next?.status] || "计划中"
-      }</span>
+            <span>${escapeHtml(next?.dateInfo?.label || "未标日期")}</span>
           </span>
           <span class="project-signal has-tip" data-tip="${escapeHtml(metricTip)}">
             <span>指标状态</span>
@@ -1681,6 +1687,49 @@ function getCurrentWeekSubmission(projectId) {
 
 function getLatestProjectSubmission(projectId) {
   return getProjectSubmissions(projectId)[0];
+}
+
+function renderLatestProjectProgress(project) {
+  const report = getLatestProjectReport(submissions, project.id);
+  if (!report) return '<p class="muted-text">暂无周度维护信息</p>';
+  return `
+    <div class="current-progress-card">
+      <header>
+        <strong>第${escapeHtml(report.week || CURRENT_REPORT_WEEK)}周 · ${escapeHtml(report.memberName || "未记录成员")}</strong>
+        <span>${escapeHtml(new Date(report.createdAt).toLocaleString("zh-CN"))}</span>
+      </header>
+      <p>${escapeHtml(report.progress || "暂无进展内容")}</p>
+      ${
+        report.milestoneTitle
+          ? `<small>关联里程碑：${escapeHtml(report.milestoneTitle)}${report.milestoneDate ? ` · ${escapeHtml(report.milestoneDate)}` : ""}</small>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function renderProjectRiskBlock(project) {
+  const risks = (project.risks || []).filter((risk) => risk.status !== "closed");
+  if (!risks.length) return '<p class="muted-text">当前项目暂无明显风险</p>';
+  return `
+    <div class="risk-list detail-risk-list">
+      ${risks
+        .map(
+          (risk) => `
+            <button class="risk-item" data-project="${project.id}">
+              <header>
+                <h3>${escapeHtml(risk.title)}</h3>
+                <span class="risk-level risk-${risk.level}">${risk.level === "high" ? "高" : risk.level === "low" ? "低" : "中"}</span>
+              </header>
+              <p>${risk.owner ? `责任人 ${escapeHtml(risk.owner)} · ` : ""}${
+            risk.dueDate ? `计划 ${escapeHtml(risk.dueDate)} · ` : ""
+          }${escapeHtml(risk.detail)}</p>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function getReportProject() {
@@ -1867,11 +1916,7 @@ function renderDetail() {
       </article>
       <article>
         <span>当前阶段</span>
-        <strong>${escapeHtml(project.stage)}</strong>
-      </article>
-      <article>
-        <span>立项状态</span>
-        <strong>${project.established === "是" ? "已立项" : "未立项"}</strong>
+        <strong>${escapeHtml(formatProjectStageLabel(project.stage))}</strong>
       </article>
     </div>
     <div class="detail-block">
@@ -1887,8 +1932,8 @@ function renderDetail() {
     overview,
     milestones: `
       <div class="detail-block">
-        <h3>当前关键节点</h3>
-        ${renderTextBlock(project.mayKeyNodes)}
+        <h3>当前进展</h3>
+        ${renderLatestProjectProgress(project)}
       </div>
       <div class="detail-block">
         <h3>里程碑计划</h3>
@@ -1908,14 +1953,20 @@ function renderDetail() {
         ${updateBlock}
       </div>
     `,
+    risks: `
+      <div class="detail-block">
+        <h3>风险提示</h3>
+        ${renderProjectRiskBlock(project)}
+      </div>
+    `,
   };
   const tabs = [
     { key: "overview", label: "概览" },
     { key: "milestones", label: "里程碑" },
     { key: "metrics", label: "指标" },
     { key: "updates", label: "更新" },
+    { key: "risks", label: "风险" },
   ];
-  if (state.detailTab === "risks") state.detailTab = "overview";
   if (!tabContent[state.detailTab]) state.detailTab = "overview";
 
   container.innerHTML = `
@@ -1924,7 +1975,7 @@ function renderDetail() {
     </div>
     <div class="detail-title">
       <h2>${escapeHtml(project.shortName)}</h2>
-      <p>${escapeHtml(project.stage)} · ${project.established === "是" ? "已立项" : "未立项"} · ${
+      <p>${escapeHtml(formatProjectStageLabel(project.stage))} · ${
     project.milestones.length
   } 个节点</p>
     </div>
@@ -1951,6 +2002,7 @@ function renderRisks() {
     .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.level] - { high: 0, medium: 1, low: 2 }[b.level]));
 
   const container = document.querySelector("#riskList");
+  if (!container) return;
   if (!risks.length) {
     container.innerHTML = '<div class="empty-state">当前筛选下暂无明显风险</div>';
     return;
@@ -2367,7 +2419,7 @@ function renderReportProjectBrief() {
           <strong>${escapeHtml(project.shortName)}</strong>
           <small>${escapeHtml(project.businessLine || "未填业务线")}</small>
         </span>
-        <button class="tiny-action" type="button" id="briefEditToggle">${state.briefEditMode ? "完成" : "编辑"}</button>
+        <button class="tiny-action" type="button" id="briefEditToggle">${state.briefEditMode ? "取消" : "编辑"}</button>
       </header>
       ${
         state.briefEditMode
@@ -2378,15 +2430,25 @@ function renderReportProjectBrief() {
                 <input value="${escapeHtml(brief.owner)}" data-brief-field="owner" placeholder="填写项目负责人" />
               </label>
               <label>
+                <span>业务线</span>
+                <input value="${escapeHtml(brief.businessLine)}" data-brief-field="businessLine" placeholder="填写业务线" />
+              </label>
+              <label>
                 <span>项目概述</span>
                 <textarea rows="3" data-brief-field="overview" placeholder="补充项目目标、范围和当前重点">${escapeHtml(brief.overview)}</textarea>
+              </label>
+              <label>
+                <span>项目组构成</span>
+                <textarea rows="4" data-brief-field="teamSummary" placeholder="例如：产品人数：2&#10;测试人数：1&#10;开发人数：4&#10;算法人数（如有）：1">${escapeHtml(brief.teamSummary)}</textarea>
               </label>
               <button class="secondary-action" type="button" data-save-brief>保存概览</button>
             </div>
           `
           : `
             <p>负责人：${escapeHtml(brief.owner || "未填写")}</p>
+            <p>业务线：${escapeHtml(brief.businessLine || "未填业务线")}</p>
             <p>项目概述：${escapeHtml(compactText(brief.overview, 110))}</p>
+            <p>项目组构成：${escapeHtml(compactText(teamSummary(project.team || []), 90))}</p>
           `
       }
       <div class="brief-week ${weekReport ? "is-done" : ""}">
@@ -2750,7 +2812,7 @@ function renderWeekTimeline() {
   prompt.textContent = selectedReport
     ? `${milestone.title}`
     : state.selectedWeek === windowInfo.currentWeek && windowInfo.hasStarted
-      ? `${milestone.title} · 维护当前节点`
+      ? `${milestone.title}`
       : `${milestone.title}`;
 
   container.innerHTML = Array.from({ length: windowInfo.weekCount }, (_, index) => index + 1).map((week) => {
@@ -2830,6 +2892,9 @@ function renderMemberWorkspace() {
     .slice(0, 8)
     .map((item) => {
       const project = projects.find((projectItem) => projectItem.id === item.projectId);
+      const deleteAction = memberProfile?.isAdmin && item.id
+        ? `<button class="submission-delete" type="button" data-delete-report="${escapeHtml(item.id)}">删除</button>`
+        : "";
       return `
         <article class="submission-item">
           <header>
@@ -2838,7 +2903,10 @@ function renderMemberWorkspace() {
           </header>
           <small>${escapeHtml(item.milestoneTitle || "未关联里程碑")}</small>
           <p>${escapeHtml(compactText(item.progress, 130))}</p>
-          <small>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</small>
+          <footer>
+            <small>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</small>
+            ${deleteAction}
+          </footer>
         </article>
       `;
     })
@@ -3101,12 +3169,12 @@ function renderGovernance() {
   }
 
   if (!items.length) {
-    list.innerHTML = '<div class="empty-state">当前没有需要 PMO 介入的治理事项</div>';
+    list.innerHTML = '<div class="empty-state">当前没有需要巡查跟进的事项</div>';
     return;
   }
 
   if (!filteredItems.length) {
-    list.innerHTML = '<div class="empty-state">当前筛选条件下没有治理事项，可切换优先级或类型查看</div>';
+    list.innerHTML = '<div class="empty-state">当前筛选条件下没有巡查事项，可切换优先级或类型查看</div>';
     return;
   }
 
@@ -3360,7 +3428,7 @@ document.addEventListener("click", async (event) => {
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
         authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
-        authState.bindingError = `已绑定群聊并同步 ${payload.members?.length || 0} 位成员。`;
+        authState.bindingError = `已绑定群聊。${formatProjectMemberSyncMessage(payload)}`;
         state.chatPickerOpen = false;
         render();
       })
@@ -3410,7 +3478,7 @@ document.addEventListener("click", async (event) => {
         const project = projects.find((item) => item.id === projectId);
         if (project) project.feishuChatId = payload.chatId || chatId;
         authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
-        authState.bindingError = `已同步 ${payload.members?.length || 0} 位群成员。`;
+        authState.bindingError = formatProjectMemberSyncMessage(payload);
         return loadRoleBindings();
       })
       .then(() => renderAuthCenter())
@@ -3449,6 +3517,33 @@ document.addEventListener("click", async (event) => {
   if (detailTab) {
     state.detailTab = detailTab.dataset.detailTab;
     renderDetail();
+    return;
+  }
+
+  const deleteReportButton = event.target.closest("[data-delete-report]");
+  if (deleteReportButton) {
+    if (!memberProfile?.isAdmin) return;
+    const reportId = deleteReportButton.dataset.deleteReport;
+    const report = submissions.find((item) => item.id === reportId);
+    const label = report ? `第${report.week || CURRENT_REPORT_WEEK}周 ${report.memberName || ""} 的填报` : "这条填报";
+    if (!window.confirm(`确认删除${label}？删除后不可恢复。`)) return;
+    deleteReportButton.disabled = true;
+    state.saveNotice = "正在删除填报记录...";
+    renderMemberWorkspace();
+    try {
+      await deleteWeeklyReport(reportId);
+      submissions = submissions.filter((item) => item.id !== reportId);
+      await loadWeeklyReports();
+      state.saveNotice = "填报记录已删除。";
+      renderMemberWorkspace();
+      renderDetail();
+      renderRisks();
+      renderProjectList();
+      renderGovernance();
+    } catch (error) {
+      state.saveNotice = error.message || "填报删除失败，请稍后重试";
+      renderMemberWorkspace();
+    }
     return;
   }
 

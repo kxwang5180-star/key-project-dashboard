@@ -37,6 +37,30 @@ export function buildGovernanceItemKey(item) {
     .join("|");
 }
 
+export function buildGovernanceTaskIdentity(input) {
+  return {
+    projectId: String(input?.projectId || "").trim(),
+    taskType: String(input?.taskType || input?.type || "").trim(),
+    title: String(input?.title || "").trim(),
+    detail: String(input?.detail || "").trim(),
+  };
+}
+
+export function buildGovernanceTaskPersistencePlan({ existingTask = null } = {}) {
+  if (existingTask) {
+    return {
+      mode: "update",
+      statusCode: 200,
+      auditAction: "governance.task.upsert",
+    };
+  }
+  return {
+    mode: "create",
+    statusCode: 201,
+    auditAction: "governance.task.create",
+  };
+}
+
 export function toClientGovernanceResolution(task) {
   return {
     taskId: task.id,
