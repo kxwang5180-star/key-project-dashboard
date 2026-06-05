@@ -46,7 +46,7 @@ export function getMilestoneReportPreview(
     .sort((a, b) => {
       const weekDiff = (Number(b.week) || 0) - (Number(a.week) || 0);
       if (weekDiff) return weekDiff;
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
     });
   const reportsToShow = expanded ? matched : matched.slice(0, limit);
   return {
@@ -75,8 +75,8 @@ export function getLatestProjectReport(reports, projectId) {
   return (Array.isArray(reports) ? reports : [])
     .filter((report) => report.projectId === projectId)
     .sort((a, b) => {
-      const createdDiff = new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      if (createdDiff) return createdDiff;
+      const activityDiff = new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+      if (activityDiff) return activityDiff;
       return (Number(b.week) || 0) - (Number(a.week) || 0);
     })[0] || null;
 }

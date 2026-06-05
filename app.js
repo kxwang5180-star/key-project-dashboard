@@ -24,6 +24,10 @@ import {
 import { hasMeaningfulReportProgress } from "./src/services/report-records.js";
 import { mergeBootstrapProjects } from "./src/ui/project-bootstrap.js";
 import { buildProjectUserGroups } from "./src/ui/identity-groups.js";
+import { buildReportProjectPickerState, getReportableProjectsForUser } from "./src/ui/report-projects.js";
+import { buildActionKey, isActionPending, setActionPending } from "./src/ui/action-state.js";
+import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js";
+import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -51,8 +55,11 @@ const state = {
   selectedMilestone: null,
   saveNotice: "",
   reportSubmitting: false,
+  pendingActions: {},
   expandedCalendarDays: {},
   expandedMilestoneReports: {},
+  expandedMetricDetails: {},
+  expandedSubmissionDetails: {},
   governanceLevel: "all",
   governanceType: "all",
   chatPickerOpen: false,
@@ -66,6 +73,7 @@ const state = {
 };
 
 const sourceRows = Array.isArray(window.PROJECT_SOURCE) ? window.PROJECT_SOURCE : [];
+const sourceMetricRows = Array.isArray(window.PROJECT_METRIC_SOURCE) ? window.PROJECT_METRIC_SOURCE : [];
 let projectMaintenance = loadProjectMaintenance();
 
 function safeLocalStorageGet(key, fallback = null) {
@@ -225,6 +233,15 @@ function cleanProjectName(name) {
     .trim();
 }
 
+function canonicalProjectName(name) {
+  const aliases = {
+    合同系统: "合同管理系统",
+    大排档赋值台计数: "大排档赋值计数",
+  };
+  const cleanName = cleanProjectName(name);
+  return aliases[cleanName] || cleanName;
+}
+
 function compactText(text, maxLength = 86) {
   const value = String(text || "").replace(/\s+/g, " ").trim();
   if (!value) return "暂无";
@@ -248,6 +265,20 @@ function sortUsersByName(users) {
 
 function getRoleLabel(role) {
   return role === "ADMIN" ? "管理员" : "项目成员";
+}
+
+function beginAction(key) {
+  if (isActionPending(state.pendingActions, key)) return false;
+  state.pendingActions = setActionPending(state.pendingActions, key, true);
+  return true;
+}
+
+function finishAction(key) {
+  state.pendingActions = setActionPending(state.pendingActions, key, false);
+}
+
+function actionAttrs(key) {
+  return isActionPending(state.pendingActions, key) ? ' disabled aria-busy="true"' : "";
 }
 
 function normalizeAuthenticatedUser(user) {
@@ -281,25 +312,10 @@ async function apiRequest(url, options = {}) {
     },
   });
   const text = await response.text();
-  let payload = null;
   const contentType = response.headers.get("content-type") || "";
-  if (text && contentType.includes("application/json")) {
-    payload = JSON.parse(text);
-  } else if (text && text.trim().startsWith("{")) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = null;
-    }
-  } else if (text) {
-    payload = {
-      message: response.ok
-        ? "接口返回格式异常"
-        : `接口返回了 HTML 页面，可能是部署入口或 API 路径错误（HTTP ${response.status}）`,
-    };
-  }
+  const payload = parseApiPayload({ text, contentType, ok: response.ok, status: response.status });
   if (!response.ok) {
-    const error = new Error(payload?.message || "请求失败");
+    const error = new Error(buildApiErrorMessage({ payload, status: response.status }));
     error.status = response.status;
     throw error;
   }
@@ -622,9 +638,7 @@ function applyProjectReportState(projectState) {
 }
 
 function getReportableProjects() {
-  if (!memberProfile || memberProfile.isAdmin) return projects;
-  const allowed = new Set(memberProfile.projectIds || []);
-  return projects.filter((project) => allowed.has(project.id));
+  return getReportableProjectsForUser(projects, memberProfile);
 }
 
 function splitLines(text) {
@@ -843,6 +857,18 @@ function extractMetricHighlights(text) {
   return highlights;
 }
 
+function getStandardMetricRows(projectName) {
+  const projectKey = canonicalProjectName(projectName);
+  return sourceMetricRows.filter((metric) => canonicalProjectName(metric.projectName) === projectKey);
+}
+
+function toMetricHighlight(metric) {
+  return {
+    label: metric.name || "指标",
+    value: metric.current && metric.current !== "-" ? metric.current : metric.target || "待补充",
+  };
+}
+
 function parseTeam(teamText) {
   const source = String(teamText || "");
   return teamRoles.map((role) => {
@@ -884,6 +910,7 @@ function buildProjects(rows) {
       const risks = deriveRiskItems(row, milestones);
       const status = deriveStatus(row, milestones, risks);
       const team = parseTeam(row.teamText);
+      const standardMetrics = getStandardMetricRows(row.name);
       return {
         ...row,
         shortName: cleanProjectName(row.name),
@@ -892,7 +919,8 @@ function buildProjects(rows) {
         risks,
         status,
         progress: deriveProgress(row, milestones),
-        metricHighlights: extractMetricHighlights(row.metricsText),
+        metricHighlights: standardMetrics.length ? standardMetrics.map(toMetricHighlight).slice(0, 4) : extractMetricHighlights(row.metricsText),
+        standardMetrics,
         team,
         owner: row.owner || "未填写",
         color: PROJECT_COLORS[index % PROJECT_COLORS.length],
@@ -941,6 +969,21 @@ function normalizeMilestone(project, milestone, index = 0) {
 }
 
 function getDefaultMetricItems(project) {
+  if (Array.isArray(project.standardMetrics) && project.standardMetrics.length) {
+    return project.standardMetrics.map((metric, index) => ({
+      id: `${project.id}-metric-${index + 1}`,
+      name: String(metric.name || `指标 ${index + 1}`).trim(),
+      current: String(metric.current || "").trim(),
+      target: String(metric.target || "").trim(),
+      observation: String(metric.observation || "").trim(),
+      chartType: parseMetricNumber(metric.target) !== null ? "donut" : "value",
+      history:
+        metric.current && metric.current !== "-"
+          ? [{ date: formatDateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate()), value: metric.current }]
+          : [],
+    }));
+  }
+
   if (project.metricHighlights.length) {
     return project.metricHighlights.map((item, index) => ({
       id: `${project.id}-metric-${index + 1}`,
@@ -1688,7 +1731,7 @@ function renderTeamCards(team) {
 function getProjectSubmissions(projectId) {
   return submissions
     .filter((item) => item.projectId === projectId)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 }
 
 function getCurrentWeekSubmission(projectId) {
@@ -1706,7 +1749,7 @@ function renderLatestProjectProgress(project) {
     <div class="current-progress-card">
       <header>
         <strong>第${escapeHtml(report.week || CURRENT_REPORT_WEEK)}周 · ${escapeHtml(report.memberName || "未记录成员")}</strong>
-        <span>${escapeHtml(new Date(report.createdAt).toLocaleString("zh-CN"))}</span>
+        <span>${escapeHtml(new Date(report.updatedAt || report.createdAt).toLocaleString("zh-CN"))}</span>
       </header>
       <p>${escapeHtml(report.progress || "暂无进展内容")}</p>
       ${
@@ -1860,7 +1903,7 @@ function renderProjectSubmissions(projectId) {
               <strong>第${escapeHtml(item.week || CURRENT_REPORT_WEEK)}周 · ${escapeHtml(item.memberName)} · ${escapeHtml(item.memberRole)}</strong>
               <span>${escapeHtml(item.milestoneTitle || "未关联里程碑")}</span>
               <p>${escapeHtml(compactText(item.progress, 110))}</p>
-              <span>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))}</span>
+              <span>${escapeHtml(new Date(item.updatedAt || item.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))}</span>
             </article>
           `
         )
@@ -2074,22 +2117,18 @@ function renderMetrics() {
 }
 
 function renderProjectSelects() {
-  const reportableProjects = getReportableProjects();
-  const options = reportableProjects
+  const pickerState = buildReportProjectPickerState(projects, memberProfile);
+  const options = pickerState.projects
     .map((project) => `<option value="${project.id}">${escapeHtml(project.shortName)} · ${escapeHtml(project.businessLine || "未填业务线")}</option>`)
     .join("");
   const reportProjectSelect = document.querySelector("#reportProjectSelect");
   if (reportProjectSelect) {
     reportProjectSelect.innerHTML = options || '<option value="">暂无可维护项目</option>';
-    reportProjectSelect.disabled = !reportableProjects.length;
-    reportProjectSelect.classList.toggle("is-hidden", reportableProjects.length <= 1);
-    reportProjectSelect.closest(".report-project-picker")?.classList.toggle("is-hidden", reportableProjects.length <= 1);
-  }
-
-  if (memberProfile?.projectId && reportProjectSelect && reportableProjects.some((project) => project.id === memberProfile.projectId)) {
-    reportProjectSelect.value = memberProfile.projectId;
-  } else if (reportProjectSelect && reportableProjects[0]) {
-    reportProjectSelect.value = reportableProjects[0].id;
+    reportProjectSelect.disabled = pickerState.isDisabled;
+    reportProjectSelect.classList.toggle("is-hidden", pickerState.shouldHidePicker);
+    reportProjectSelect.closest(".report-project-picker")?.classList.toggle("is-hidden", pickerState.shouldHidePicker);
+    reportProjectSelect.value = pickerState.selectedProjectId;
+    if (memberProfile && pickerState.selectedProjectId) memberProfile.projectId = pickerState.selectedProjectId;
   }
 }
 
@@ -2273,6 +2312,8 @@ function renderAuthCenter() {
           const chatMembers = chat?.members || [];
           const chatMemberKey = `project:${project.id}`;
           const chatName = chat?.name || (project.feishuChatId ? "已绑定群聊" : "未选择群聊");
+          const syncProjectChatKey = buildActionKey("sync-project-chat", project.id);
+          const isSyncingProjectChat = isActionPending(state.pendingActions, syncProjectChatKey);
           return `
             <article class="binding-row project-chat-row" data-project-chat-row="${project.id}">
               <div class="binding-user">
@@ -2296,7 +2337,7 @@ function renderAuthCenter() {
               </div>
               <div class="binding-actions">
                 <button class="secondary-action compact-action" type="button" data-open-chat-picker="${project.id}">选择群聊</button>
-                <button class="secondary-action compact-action" type="button" data-sync-project-chat="${project.id}">同步成员</button>
+                <button class="secondary-action compact-action" type="button" data-sync-project-chat="${project.id}"${actionAttrs(syncProjectChatKey)}>${isSyncingProjectChat ? "同步中..." : "同步成员"}</button>
               </div>
             </article>
           `;
@@ -2344,7 +2385,13 @@ function renderChatPickerModal() {
                           expanded: Boolean(state.expandedChatMembers[`chat:${chat.chatId}`]),
                         })}
                       </div>
-                      <button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}">选择</button>
+                      ${
+                        (() => {
+                          const pickKey = buildActionKey("pick-chat", state.chatPickerProjectId, chat.chatId);
+                          const isPicking = isActionPending(state.pendingActions, pickKey);
+                          return `<button class="primary-action compact-action" type="button" data-pick-chat="${escapeHtml(chat.chatId)}"${actionAttrs(pickKey)}>${isPicking ? "同步中..." : "选择"}</button>`;
+                        })()
+                      }
                     </article>
                   `
                 )
@@ -2368,6 +2415,8 @@ function renderUserEditModal() {
   }
   const projectOptions = `<option value="">不指定默认项目</option>` +
     projects.map((p) => `<option value="${p.id}" ${user.projectId === p.id ? "selected" : ""}>${escapeHtml(p.shortName)}</option>`).join("");
+  const saveUserKey = buildActionKey("save-user-edit", user.id);
+  const isSavingUser = isActionPending(state.pendingActions, saveUserKey);
 
   modal.innerHTML = `
     <section class="modal-card user-edit-card" role="dialog" aria-modal="true" aria-labelledby="userEditTitle">
@@ -2397,7 +2446,7 @@ function renderUserEditModal() {
       </div>
       <div class="user-edit-actions">
         <button class="secondary-action" type="button" data-close-user-edit>取消</button>
-        <button class="primary-action" type="button" data-save-user-edit="${user.id}">保存绑定</button>
+        <button class="primary-action" type="button" data-save-user-edit="${user.id}"${actionAttrs(saveUserKey)}>${isSavingUser ? "保存中..." : "保存绑定"}</button>
       </div>
     </section>
   `;
@@ -2412,6 +2461,8 @@ function renderReportProjectBrief() {
   }
   const weekReport = getWeekSubmission(project.id);
   const brief = state.briefEditMode ? ensureBriefDraft(project) : getProjectBriefData(project);
+  const saveBriefKey = buildActionKey("save-brief", project.id);
+  const isSavingBrief = isActionPending(state.pendingActions, saveBriefKey);
 
   container.innerHTML = `
     <article class="report-brief-card" style="--project-color: ${project.color}">
@@ -2442,7 +2493,7 @@ function renderReportProjectBrief() {
                 <span>项目组构成</span>
                 <textarea rows="4" data-brief-field="teamSummary" placeholder="例如：产品人数：2&#10;测试人数：1&#10;开发人数：4&#10;算法人数（如有）：1">${escapeHtml(brief.teamSummary)}</textarea>
               </label>
-              <button class="secondary-action" type="button" data-save-brief>保存概览</button>
+              <button class="secondary-action" type="button" data-save-brief${actionAttrs(saveBriefKey)}>${isSavingBrief ? "保存中..." : "保存概览"}</button>
             </div>
           `
           : `
@@ -2527,7 +2578,7 @@ function renderReportStatusPanel() {
   const isReady = items.slice(0, 3).every((item) => item.done);
   const statusClass = savedReport ? "is-saved" : isReady ? "is-ready" : "is-attention";
   const statusText = savedReport ? `第${state.selectedWeek}周已保存` : isReady ? "可以提交" : "待补充";
-  const savedTime = savedReport ? new Date(savedReport.createdAt).toLocaleString("zh-CN") : "";
+  const savedTime = savedReport ? new Date(savedReport.updatedAt || savedReport.createdAt).toLocaleString("zh-CN") : "";
 
   container.innerHTML = `
     <article class="report-status-card ${statusClass}">
@@ -2575,6 +2626,23 @@ function renderMetricTrend(metric) {
   `;
 }
 
+function renderMetricDetail(metric, isExpanded) {
+  if (!isExpanded) return "";
+  const history = Array.isArray(metric.history) && metric.history.length
+    ? metric.history
+        .slice(-8)
+        .map((item) => `<span>${escapeHtml(item.date || "未标日期")}：${escapeHtml(item.value || "未填")}</span>`)
+        .join("")
+    : "<span>暂无历史记录</span>";
+  return `
+    <div class="metric-detail-panel">
+      <p><b>计算口径</b>${escapeHtml(metric.observation || "未维护计算口径")}</p>
+      <p><b>当前/目标</b>${escapeHtml(metric.current || "待填")}${metric.target ? ` / ${escapeHtml(metric.target)}` : ""}</p>
+      <div class="metric-history-list">${history}</div>
+    </div>
+  `;
+}
+
 function renderMetricVisual(metric, index, project) {
   const progress = getMetricProgress(metric);
   const hasTarget = metricHasTarget(metric);
@@ -2583,23 +2651,26 @@ function renderMetricVisual(metric, index, project) {
   const hasTargetOnly = hasTarget && !String(metric.current || "").trim();
   const toneClass = hasTarget ? "is-target" : hasNumber ? "is-number" : "is-qualitative";
   const label = hasTargetOnly ? "目标值" : hasTarget ? "目标达成" : hasCurrentText ? "当前值" : "观测口径";
+  const metricKey = `${project.id}:${metric.id || index}`;
+  const expanded = isExpandedKey(state.expandedMetricDetails, metricKey);
 
   if (hasTargetOnly) {
     return `
-      <article class="metric-visual-card ${toneClass} is-target-only" style="--project-color: ${project.color}">
+      <article class="metric-visual-card ${toneClass} is-target-only ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
         <div class="metric-visual-copy">
           <span>${label}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
           <p>${escapeHtml(metric.observation || "仅维护目标值")}</p>
         </div>
         <div class="metric-hero-value">${escapeHtml(metric.target || "待填目标")}</div>
+        ${renderMetricDetail(metric, expanded)}
       </article>
     `;
   }
 
   if (progress !== null) {
     return `
-      <article class="metric-visual-card ${toneClass}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg">
+      <article class="metric-visual-card ${toneClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
         <div class="metric-visual-copy">
           <span>${label}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
@@ -2608,18 +2679,20 @@ function renderMetricVisual(metric, index, project) {
         <div class="metric-hero-visual">
           <div class="metric-ring metric-ring-large metric-pie"><span>${progress}%</span></div>
         </div>
+        ${renderMetricDetail(metric, expanded)}
       </article>
     `;
   }
 
   return `
-    <article class="metric-visual-card ${toneClass}" style="--project-color: ${project.color}">
+    <article class="metric-visual-card ${toneClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
       <div class="metric-visual-copy">
         <span>${label}</span>
         <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
         <p>${escapeHtml(metric.observation || "未设置目标值，可先维护当前表现和观测口径。")}</p>
       </div>
       <div class="metric-hero-value">${escapeHtml(metric.current || metric.target || "待填")}</div>
+      ${renderMetricDetail(metric, expanded)}
     </article>
   `;
 }
@@ -2642,6 +2715,8 @@ function renderReportProjectMetrics() {
   if (!container || !project) return;
   const metrics = getProjectMetricItems(project);
   const editableMetrics = state.metricEditMode ? ensureMetricDraft(project) : metrics;
+  const saveMetricsKey = buildActionKey("save-metrics", project.id);
+  const isSavingMetrics = isActionPending(state.pendingActions, saveMetricsKey);
   const editableMarkup = editableMetrics
     .map(
       (metric, index) => `
@@ -2659,11 +2734,13 @@ function renderReportProjectMetrics() {
             <input value="${escapeHtml(metric.target)}" data-metric-field="target" data-metric-id="${metric.id}" placeholder="无目标可留空" />
           </label>
           <label class="metric-note-field">
-            <span>观测口径</span>
-            <input value="${escapeHtml(metric.observation)}" data-metric-field="observation" data-metric-id="${metric.id}" placeholder="例如：每周一查看上周门店数据" />
+            <span>计算口径</span>
+            <textarea data-metric-field="observation" data-metric-id="${metric.id}" placeholder="例如：已完成数量 / 计划总数">${escapeHtml(metric.observation)}</textarea>
           </label>
-          <button class="secondary-action compact-action" type="button" data-record-metric="${metric.id}">记录本期</button>
-          <button class="ghost-danger" type="button" data-delete-metric="${metric.id}">删除</button>
+          <div class="metric-row-actions">
+            <button class="secondary-action compact-action" type="button" data-record-metric="${metric.id}">记录本期</button>
+            <button class="ghost-danger" type="button" data-delete-metric="${metric.id}">删除</button>
+          </div>
         </article>
       `
     )
@@ -2682,7 +2759,7 @@ function renderReportProjectMetrics() {
         <span>指标维护</span>
         <div class="maintenance-actions">
           <button class="secondary-action" type="button" data-add-metric>新增指标</button>
-          <button class="secondary-action" type="button" data-save-metrics>保存指标</button>
+          <button class="secondary-action" type="button" data-save-metrics${actionAttrs(saveMetricsKey)}>${isSavingMetrics ? "保存中..." : "保存指标"}</button>
         </div>
       </div>
       <div class="metric-maintenance-list">${editableMarkup}</div>
@@ -2699,7 +2776,14 @@ function renderReportMilestoneRail() {
   const addButton = document.querySelector(".milestone-add-button");
   if (addButton) addButton.classList.toggle("is-visible", state.milestoneManageMode);
   const saveButton = document.querySelector(".milestone-save-button");
-  if (saveButton) saveButton.classList.toggle("is-visible", state.milestoneManageMode);
+  const saveMilestonesKey = buildActionKey("save-milestones", project.id);
+  const isSavingMilestones = isActionPending(state.pendingActions, saveMilestonesKey);
+  if (saveButton) {
+    saveButton.classList.toggle("is-visible", state.milestoneManageMode);
+    saveButton.disabled = isSavingMilestones;
+    saveButton.setAttribute("aria-busy", isSavingMilestones ? "true" : "false");
+    saveButton.textContent = isSavingMilestones ? "保存中..." : "保存";
+  }
 
   const milestones = (state.milestoneManageMode ? ensureMilestoneDraft(project) : getReportMilestones(project)).slice(0, 10);
   if (!milestones.length) {
@@ -2787,12 +2871,20 @@ function renderWeekTimeline() {
   const snapshot = document.querySelector("#weekSnapshot");
   const focus = document.querySelector(".milestone-focus");
   const editToggle = document.querySelector("#milestoneEditToggle");
+  const saveFocusedButton = document.querySelector("[data-save-focused-milestone]");
   const project = getReportProject();
   const milestone = getReportMilestone(project);
   if (!container || !prompt || !snapshot || !project || !milestone) return;
 
   if (focus) focus.classList.toggle("is-editing", state.milestoneEditMode);
   if (editToggle) editToggle.textContent = state.milestoneEditMode ? "收起" : "修改";
+  const saveFocusedKey = buildActionKey("save-focused-milestone", project.id, milestone.id);
+  const isSavingFocused = isActionPending(state.pendingActions, saveFocusedKey);
+  if (saveFocusedButton) {
+    saveFocusedButton.disabled = isSavingFocused;
+    saveFocusedButton.setAttribute("aria-busy", isSavingFocused ? "true" : "false");
+    saveFocusedButton.textContent = isSavingFocused ? "保存中..." : "保存里程碑";
+  }
 
   const windowInfo = getMilestoneWindow(project, milestone);
   state.selectedWeek = Math.min(state.selectedWeek, windowInfo.weekCount);
@@ -2884,23 +2976,35 @@ function renderMemberWorkspace() {
 
   list.innerHTML = submissions
     .slice()
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
     .slice(0, 8)
     .map((item) => {
       const project = projects.find((projectItem) => projectItem.id === item.projectId);
+      const deleteKey = buildActionKey("delete-report", item.id);
+      const isDeleting = isActionPending(state.pendingActions, deleteKey);
+      const submissionKey = item.id || `${item.projectId}:${item.week}:${item.milestoneId || "project"}`;
+      const expanded = isExpandedKey(state.expandedSubmissionDetails, submissionKey);
       const deleteAction = memberProfile?.isAdmin && item.id
-        ? `<button class="submission-delete" type="button" data-delete-report="${escapeHtml(item.id)}">删除</button>`
+        ? `<button class="submission-delete" type="button" data-delete-report="${escapeHtml(item.id)}"${actionAttrs(deleteKey)}>${isDeleting ? "删除中..." : "删除"}</button>`
         : "";
       return `
-        <article class="submission-item">
+        <article class="submission-item ${expanded ? "is-expanded" : ""}" data-toggle-submission-detail="${escapeHtml(submissionKey)}" role="button" tabindex="0">
           <header>
             <strong>第${escapeHtml(item.week || CURRENT_REPORT_WEEK)}周 · ${escapeHtml(project?.shortName || "未知项目")}</strong>
             <span>${escapeHtml(item.memberName)} · ${escapeHtml(item.memberRole)}</span>
           </header>
           <small>${escapeHtml(item.milestoneTitle || "未关联里程碑")}</small>
-          <p>${escapeHtml(compactText(item.progress, 130))}</p>
+          <p>${escapeHtml(expanded ? item.progress || "暂无进展内容" : compactText(item.progress, 130))}</p>
+          ${
+            expanded
+              ? `<div class="submission-detail">
+                  <p><b>风险与诉求</b>${escapeHtml(item.risk || "暂无")}</p>
+                  <p><b>里程碑状态</b>${escapeHtml(item.milestoneStatus || "planned")}${item.milestoneDate ? ` · ${escapeHtml(item.milestoneDate)}` : ""}</p>
+                </div>`
+              : ""
+          }
           <footer>
-            <small>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</small>
+            <small>${escapeHtml(new Date(item.updatedAt || item.createdAt).toLocaleString("zh-CN"))} · ${expanded ? "点击收起" : "点击查看详情"}</small>
             ${deleteAction}
           </footer>
         </article>
@@ -3231,13 +3335,17 @@ function render() {
 }
 
 function openProjectMaintenance(projectId) {
+  const targetProject = getReportableProjects().find((project) => project.id === projectId) || projects.find((project) => project.id === projectId);
+  if (!targetProject) return;
+  state.selectedId = targetProject.id;
   state.currentView = "report";
   resetAllDrafts();
   resetReportEditorState();
+  if (memberProfile) memberProfile.projectId = targetProject.id;
   window.location.hash = getViewHash(state.currentView);
   render();
   const select = document.querySelector("#reportProjectSelect");
-  if (select) select.value = projectId;
+  if (select) select.value = targetProject.id;
   const milestone = getReportMilestone(getReportProject());
   state.selectedWeek = milestone ? getMilestoneWindow(getReportProject(), milestone).currentWeek || 1 : CURRENT_REPORT_WEEK;
   syncReportMilestoneFields();
@@ -3332,8 +3440,11 @@ document.addEventListener("click", async (event) => {
   const saveUserEditButton = event.target.closest("[data-save-user-edit]");
   if (saveUserEditButton) {
     const userId = saveUserEditButton.dataset.saveUserEdit;
+    const actionKey = buildActionKey("save-user-edit", userId);
+    if (!beginAction(actionKey)) return;
     const role = document.querySelector(`[data-edit-user-role="${userId}"]`)?.value || "MEMBER";
     const defaultProjectId = document.querySelector(`[data-edit-user-project="${userId}"]`)?.value || "";
+    renderUserEditModal();
     saveRoleBinding(userId, role, defaultProjectId)
       .then(() => {
         authState.bindingError = "";
@@ -3344,6 +3455,10 @@ document.addEventListener("click", async (event) => {
       .catch((error) => {
         authState.bindingError = error.message;
         render();
+      })
+      .finally(() => {
+        finishAction(actionKey);
+        renderUserEditModal();
       });
     return;
   }
@@ -3418,6 +3533,9 @@ document.addEventListener("click", async (event) => {
   if (pickChatButton) {
     const projectId = state.chatPickerProjectId;
     const chatId = pickChatButton.dataset.pickChat;
+    const actionKey = buildActionKey("pick-chat", projectId, chatId);
+    if (!beginAction(actionKey)) return;
+    renderChatPickerModal();
     saveProjectChatBinding(projectId, chatId)
       .then(() => syncProjectChatMembers(projectId, chatId))
       .then((payload) => {
@@ -3431,6 +3549,10 @@ document.addEventListener("click", async (event) => {
       .catch((error) => {
         authState.bindingError = error.message;
         render();
+      })
+      .finally(() => {
+        finishAction(actionKey);
+        renderChatPickerModal();
       });
     return;
   }
@@ -3467,7 +3589,10 @@ document.addEventListener("click", async (event) => {
   const syncProjectChatButton = event.target.closest("[data-sync-project-chat]");
   if (syncProjectChatButton) {
     const projectId = syncProjectChatButton.dataset.syncProjectChat;
+    const actionKey = buildActionKey("sync-project-chat", projectId);
+    if (!beginAction(actionKey)) return;
     const chatId = document.querySelector(`[data-project-chat-id="${projectId}"]`)?.value || "";
+    renderAuthCenter();
     syncProjectChatMembers(projectId, chatId)
       .then((payload) => {
         if (!payload) { authState.bindingError = "群成员同步失败，请重试。"; return; }
@@ -3480,6 +3605,10 @@ document.addEventListener("click", async (event) => {
       .then(() => renderAuthCenter())
       .catch((error) => {
         authState.bindingError = error.message;
+        renderAuthCenter();
+      })
+      .finally(() => {
+        finishAction(actionKey);
         renderAuthCenter();
       });
     return;
@@ -3520,9 +3649,15 @@ document.addEventListener("click", async (event) => {
   if (deleteReportButton) {
     if (!memberProfile?.isAdmin) return;
     const reportId = deleteReportButton.dataset.deleteReport;
+    const actionKey = buildActionKey("delete-report", reportId);
+    if (!beginAction(actionKey)) return;
     const report = submissions.find((item) => item.id === reportId);
     const label = report ? `第${report.week || CURRENT_REPORT_WEEK}周 ${report.memberName || ""} 的填报` : "这条填报";
-    if (!window.confirm(`确认删除${label}？删除后不可恢复。`)) return;
+    if (!window.confirm(`确认删除${label}？删除后不可恢复。`)) {
+      finishAction(actionKey);
+      renderMemberWorkspace();
+      return;
+    }
     deleteReportButton.disabled = true;
     state.saveNotice = "正在删除填报记录...";
     renderMemberWorkspace();
@@ -3539,6 +3674,9 @@ document.addEventListener("click", async (event) => {
     } catch (error) {
       state.saveNotice = error.message || "填报删除失败，请稍后重试";
       renderMemberWorkspace();
+    } finally {
+      finishAction(actionKey);
+      renderMemberWorkspace();
     }
     return;
   }
@@ -3550,6 +3688,23 @@ document.addEventListener("click", async (event) => {
     else resetMetricDraft(project.id);
     state.metricEditMode = !state.metricEditMode;
     renderReportProjectMetrics();
+    return;
+  }
+
+  const metricDetailToggle = event.target.closest("[data-toggle-metric-detail]");
+  if (metricDetailToggle) {
+    state.expandedMetricDetails = toggleExpandedKey(state.expandedMetricDetails, metricDetailToggle.dataset.toggleMetricDetail);
+    renderReportProjectMetrics();
+    return;
+  }
+
+  const submissionDetailToggle = event.target.closest("[data-toggle-submission-detail]");
+  if (submissionDetailToggle && !event.target.closest("[data-delete-report]")) {
+    state.expandedSubmissionDetails = toggleExpandedKey(
+      state.expandedSubmissionDetails,
+      submissionDetailToggle.dataset.toggleSubmissionDetail
+    );
+    renderMemberWorkspace();
     return;
   }
 
@@ -3566,6 +3721,8 @@ document.addEventListener("click", async (event) => {
   const saveBriefButton = event.target.closest("[data-save-brief]");
   if (saveBriefButton) {
     const project = getReportProject();
+    const actionKey = buildActionKey("save-brief", project?.id);
+    if (!beginAction(actionKey)) return;
     const brief = ensureBriefDraft(project);
     state.saveNotice = "正在保存项目概览...";
     renderMemberWorkspace();
@@ -3577,6 +3734,8 @@ document.addEventListener("click", async (event) => {
       state.saveNotice = "项目概览已保存。";
     } catch (error) {
       state.saveNotice = error.message;
+    } finally {
+      finishAction(actionKey);
     }
     renderReportProjectBrief();
     renderProjectList();
@@ -3630,9 +3789,12 @@ document.addEventListener("click", async (event) => {
   const saveMetricsButton = event.target.closest("[data-save-metrics]");
   if (saveMetricsButton) {
     const project = getReportProject();
+    const actionKey = buildActionKey("save-metrics", project?.id);
+    if (!beginAction(actionKey)) return;
     const metricDraft = ensureMetricDraft(project);
     state.saveNotice = "正在保存项目指标...";
     renderReportStatusPanel();
+    renderReportProjectMetrics();
     saveProjectMetrics(project, metricDraft)
       .then((payload) => {
         if (payload?.projectState) applyProjectReportState(payload.projectState);
@@ -3645,6 +3807,7 @@ document.addEventListener("click", async (event) => {
         state.saveNotice = error.message;
       })
       .finally(() => {
+        finishAction(actionKey);
         renderReportProjectMetrics();
         renderDetail();
         renderProjectList();
@@ -3696,9 +3859,12 @@ document.addEventListener("click", async (event) => {
   const saveMilestonesButton = event.target.closest("[data-save-milestones]");
   if (saveMilestonesButton) {
     const project = getReportProject();
+    const actionKey = buildActionKey("save-milestones", project?.id);
+    if (!beginAction(actionKey)) return;
     const milestoneDraft = ensureMilestoneDraft(project);
     state.saveNotice = "正在保存项目里程碑...";
     renderReportStatusPanel();
+    renderReportMilestoneRail();
     saveProjectMilestones(project, milestoneDraft)
       .then((payload) => {
         if (payload?.projectState) applyProjectReportState(payload.projectState);
@@ -3711,6 +3877,7 @@ document.addEventListener("click", async (event) => {
         state.saveNotice = error.message;
       })
       .finally(() => {
+        finishAction(actionKey);
         refreshMilestoneMaintenanceViews();
       });
     return;
@@ -3730,6 +3897,8 @@ document.addEventListener("click", async (event) => {
     const project = getReportProject();
     const milestone = getReportMilestone(project);
     if (!form || !project || !milestone) return;
+    const actionKey = buildActionKey("save-focused-milestone", project.id, milestone.id);
+    if (!beginAction(actionKey)) return;
     const nextTitle = String(form.elements.milestoneTitle.value || milestone.title).trim();
     const nextDate = String(form.elements.milestoneDate.value || milestone.dateInfo?.key || "").trim();
     const nextStatus = editableMilestoneStatusMap[form.elements.milestoneStatus.value] ? form.elements.milestoneStatus.value : "planned";
@@ -3763,6 +3932,8 @@ document.addEventListener("click", async (event) => {
     } catch (error) {
       state.saveNotice = error.message;
       renderReportStatusPanel();
+    } finally {
+      finishAction(actionKey);
     }
     return;
   }
@@ -3821,6 +3992,10 @@ document.addEventListener("click", async (event) => {
 
   const projectButton = event.target.closest("[data-project]");
   if (projectButton) {
+    if (projectButton.classList.contains("project-row")) {
+      openProjectMaintenance(projectButton.dataset.project);
+      return;
+    }
     state.selectedId = projectButton.dataset.project;
     state.detailTab = "overview";
     renderProjectList();
@@ -3927,6 +4102,14 @@ document.addEventListener("change", (event) => {
     renderWeekTimeline();
     renderReportStatusPanel();
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const clickableDetail = event.target.closest("[data-toggle-metric-detail], [data-toggle-submission-detail]");
+  if (!clickableDetail) return;
+  event.preventDefault();
+  clickableDetail.click();
 });
 
 document.addEventListener("input", (event) => {

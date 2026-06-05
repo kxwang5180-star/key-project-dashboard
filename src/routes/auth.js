@@ -19,6 +19,7 @@ import { resolveIdentityUserRegistration, resolveIdentityUserUpdate } from "../s
 import { toPublicUser } from "../services/public-user.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import { buildUserRoleAuditDetail } from "../services/audit-log-records.js";
+import { buildFeishuAuthFailureMessage } from "../services/feishu-auth-records.js";
 
 export const authRouter = Router();
 
@@ -117,7 +118,7 @@ authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
 
   const { code, state, error, error_description: errorDescription } = req.query || {};
   if (error) {
-    return res.status(401).send(`飞书授权失败：${String(errorDescription || error)}`);
+    return res.status(401).send(buildFeishuAuthFailureMessage(error, errorDescription));
   }
   if (!code || !state) {
     return res.status(400).send("缺少飞书授权回调参数");

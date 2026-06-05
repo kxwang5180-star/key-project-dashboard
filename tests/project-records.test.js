@@ -6,6 +6,7 @@ import {
   buildProjectMetricCreateData,
   buildProjectBriefUpdatePayload,
   normalizeProjectMilestoneStatus,
+  splitMetricCreateDataForUpdate,
   toPublicProjectMaintenanceState,
   toPublicProjectBrief,
 } from "../src/services/project-records.js";
@@ -141,6 +142,21 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
   );
 });
 
+test("buildProjectMetricCreateData accepts calculation aliases for metric formula", () => {
+  assert.equal(
+    buildProjectMetricCreateData(
+      {
+        name: "完成率",
+        current: "70%",
+        target: "100%",
+        calculation: "已完成数量 / 计划总数",
+      },
+      { projectId: "project_1", index: 0 }
+    ).observation,
+    "已完成数量 / 计划总数"
+  );
+});
+
 test("buildProjectMetricCreateData preserves client metric ids and history records", () => {
   assert.deepEqual(
     buildProjectMetricCreateData(
@@ -175,6 +191,32 @@ test("buildProjectMetricCreateData preserves client metric ids and history recor
       },
     }
   );
+});
+
+test("splitMetricCreateDataForUpdate separates nested metric records from update data", () => {
+  const metricData = buildProjectMetricCreateData(
+    {
+      id: "metric_1",
+      name: "完成率",
+      current: "80%",
+      target: "100%",
+      history: [{ date: "2026-06-01", value: "80%" }],
+    },
+    { projectId: "project_1", index: 0 }
+  );
+
+  assert.deepEqual(splitMetricCreateDataForUpdate(metricData), {
+    data: {
+      projectId: "project_1",
+      name: "完成率",
+      currentValue: "80%",
+      targetValue: "100%",
+      observation: null,
+      chartType: null,
+      sortOrder: 0,
+    },
+    records: [{ recordDate: new Date("2026-06-01T00:00:00.000Z"), value: "80%" }],
+  });
 });
 
 test("buildProjectMilestoneCreateData ignores invalid date keys instead of creating invalid dates", () => {

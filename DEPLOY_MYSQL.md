@@ -102,7 +102,7 @@ npm run preflight -- --skip-http
 npm run preflight -- --base-url http://127.0.0.1:3000
 ```
 
-自检会检查关键环境变量、`FEISHU_REDIRECT_URI` 地址格式，以及 `/api`、`/api/health`、`/api/auth/me` 的返回类型。
+自检会检查关键环境变量、`FEISHU_REDIRECT_URI` 是否指向 `/api/auth/feishu/callback`、`FEISHU_SCOPES` 是否包含登录与群聊同步所需权限，以及 `/api`、`/api/health`、`/api/auth/me` 的返回类型。
 
 开发：
 
@@ -300,6 +300,7 @@ npm run feishu:chat-members -- --json
 
 - 飞书只负责确认用户身份
 - 系统角色优先通过邮箱映射，也支持飞书 `open_id`、`union_id`、`user_id` 映射，避免飞书未返回邮箱时无法识别管理员
+- 如果飞书授权页直接显示“你没有某应用的使用权限”，说明用户还没进入本系统回调，原因是飞书应用本身的可用范围或发布范围没有包含该用户；需要先在飞书管理后台把用户或所在部门加入应用范围，再重新登录。
 
 可用环境变量：
 

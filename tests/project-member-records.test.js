@@ -4,6 +4,7 @@ import {
   buildFeishuChatMemberRecord,
   buildProjectMemberRecord,
   chooseChatMemberSyncMembers,
+  buildUserMembershipLinkWhere,
   buildUserProjectMemberConditions,
 } from "../src/services/project-member-records.js";
 
@@ -89,6 +90,30 @@ test("buildUserProjectMemberConditions builds stable permission matching conditi
 
 test("buildUserProjectMemberConditions omits empty identity fields", () => {
   assert.deepEqual(buildUserProjectMemberConditions({ email: " " }), []);
+});
+
+test("buildUserMembershipLinkWhere builds a reusable unlinked member matcher", () => {
+  const where = buildUserMembershipLinkWhere({
+    id: "user_1",
+    feishuUserId: "u_123",
+    feishuOpenId: "ou_123",
+    feishuUnionId: "on_123",
+    email: " USER@example.COM ",
+  });
+
+  assert.deepEqual(where, {
+    userId: null,
+    OR: [
+      { feishuUserId: "u_123" },
+      { feishuOpenId: "ou_123" },
+      { feishuUnionId: "on_123" },
+      { email: "user@example.com" },
+    ],
+  });
+});
+
+test("buildUserMembershipLinkWhere returns null without Feishu or email identity", () => {
+  assert.equal(buildUserMembershipLinkWhere({ id: "user_1", email: " " }), null);
 });
 
 test("chooseChatMemberSyncMembers prefers fresh live members when available", () => {

@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import {
   DEFAULT_API_PATHS,
   checkDependencyLockfile,
+  checkFeishuRedirectUri,
+  checkFeishuScopes,
   checkRuntimeDependencies,
   checkRequiredEnv,
   checkUrl,
@@ -84,7 +86,8 @@ async function main() {
     }),
     checkRequiredEnv(process.env),
     checkUrl("PREFLIGHT_BASE_URL", args.baseUrl),
-    checkUrl("FEISHU_REDIRECT_URI", process.env.FEISHU_REDIRECT_URI),
+    checkFeishuRedirectUri(process.env.FEISHU_REDIRECT_URI),
+    checkFeishuScopes(process.env.FEISHU_SCOPES),
   ];
 
   if (!args.skipHttp && checks.find((check) => check.name === "PREFLIGHT_BASE_URL")?.ok) {

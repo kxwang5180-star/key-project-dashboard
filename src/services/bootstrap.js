@@ -41,7 +41,7 @@ export async function getBootstrapPayload(user) {
           },
         },
         reports: {
-          orderBy: [{ weekNumber: "desc" }, { createdAt: "desc" }],
+          orderBy: [{ weekNumber: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
           take: 20,
           include: {
             author: {

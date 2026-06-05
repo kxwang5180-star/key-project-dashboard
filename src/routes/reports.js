@@ -3,15 +3,18 @@ import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser } from "../services/project-members.js";
+import { resolveProjectMaintenanceAccess } from "../services/project-maintenance-records.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import {
   buildMilestoneUpdateFromReport,
   buildRiskFromReport,
+  buildWeeklyReportLookup,
   buildWeeklyReportDeleteAuditDetail,
   hasMeaningfulReportProgress,
   normalizeMilestoneState,
   normalizeReportWeekNumber,
   parseReportMilestoneDate,
+  shouldCreateRiskForReportChange,
   toPublicProjectReportState,
   toPublicWeeklyReport,
 } from "../services/report-records.js";
@@ -24,7 +27,7 @@ reportRouter.get("/", asyncRoute(async (req, res) => {
   const allowedProjectIds = await getAllowedProjectIdsForUser(req.user);
   const reports = await prisma.weeklyReport.findMany({
     where: req.user.role === "ADMIN" ? undefined : { projectId: { in: allowedProjectIds } },
-    orderBy: [{ createdAt: "desc" }],
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     take: 100,
     include: {
       author: {
@@ -89,9 +92,13 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
     return res.status(400).json({ message: "项目、周次、进展必填" });
   }
 
-  if (!(await canUserMaintainProject(req.user, projectId))) {
-    return res.status(403).json({ message: "你不在该项目群聊成员中，不能提交该项目填报" });
-  }
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const access = resolveProjectMaintenanceAccess({
+    project,
+    canMaintain: project ? await canUserMaintainProject(req.user, projectId) : false,
+    deniedMessage: "你不在该项目群聊成员中，不能提交该项目填报",
+  });
+  if (!access.ok) return res.status(access.status).json({ message: access.message });
 
   const result = await prisma.$transaction(async (tx) => {
     const existingMilestone = milestoneId
@@ -127,32 +134,55 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
       riskSummary,
       ownerName: req.user.name,
     });
-    if (risk) {
+
+    const reportLookup = buildWeeklyReportLookup({
+      projectId,
+      authorId: req.user.id,
+      weekNumber: normalizedWeekNumber,
+      milestoneId: existingMilestone?.id || null,
+    });
+    const existingReport = await tx.weeklyReport.findFirst({
+      where: reportLookup,
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        riskSummary: true,
+      },
+    });
+
+    if (shouldCreateRiskForReportChange(existingReport, risk)) {
       await tx.risk.create({ data: risk });
     }
 
-    const savedReport = await tx.weeklyReport.create({
-      data: {
-        projectId,
-        milestoneId: existingMilestone?.id || null,
-        authorId: req.user.id,
-        weekNumber: normalizedWeekNumber,
-        progress: String(progress).trim(),
-        riskSummary: riskSummary ? String(riskSummary).trim() : null,
-        milestoneTitle: milestoneTitle ? String(milestoneTitle).trim() : null,
-        milestoneDate: parseReportMilestoneDate(milestoneDate),
-        milestoneState: normalizeMilestoneState(milestoneState),
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            role: true,
-          },
+    const reportData = {
+      progress: String(progress).trim(),
+      riskSummary: riskSummary ? String(riskSummary).trim() : null,
+      milestoneTitle: milestoneTitle ? String(milestoneTitle).trim() : null,
+      milestoneDate: parseReportMilestoneDate(milestoneDate),
+      milestoneState: normalizeMilestoneState(milestoneState),
+    };
+    const reportInclude = {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
         },
       },
-    });
+    };
+    const savedReport = existingReport
+      ? await tx.weeklyReport.update({
+        where: { id: existingReport.id },
+        data: reportData,
+        include: reportInclude,
+      })
+      : await tx.weeklyReport.create({
+        data: {
+          ...reportLookup,
+          ...reportData,
+        },
+        include: reportInclude,
+      });
 
     const projectState = await tx.project.findUnique({
       where: { id: projectId },

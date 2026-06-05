@@ -15,6 +15,13 @@ export const DEFAULT_API_PATHS = [
   "/api/auth/me",
 ];
 
+export const REQUIRED_FEISHU_SCOPES = [
+  "contact:user.base:readonly",
+  "auth:user.id:read",
+  "im:chat:read",
+  "im:chat.members:read",
+];
+
 export function checkRequiredEnv(env, keys = REQUIRED_DEPLOY_ENV_KEYS) {
   const missing = keys.filter((key) => !String(env[key] || "").trim());
   return {
@@ -48,6 +55,39 @@ export function checkUrl(name, value, options = {}) {
       message: `${name} 不是有效 URL`,
     };
   }
+}
+
+export function checkFeishuRedirectUri(value) {
+  const baseCheck = checkUrl("FEISHU_REDIRECT_URI", value);
+  if (!baseCheck.ok) return baseCheck;
+  const url = new URL(baseCheck.value);
+  const expectedPath = "/api/auth/feishu/callback";
+  const ok = url.pathname === expectedPath;
+  return {
+    name: "feishu-redirect-uri",
+    ok,
+    value: baseCheck.value,
+    message: ok
+      ? "飞书回调地址路径正确"
+      : `FEISHU_REDIRECT_URI 必须指向 ${expectedPath}，当前路径为 ${url.pathname || "/"}`,
+  };
+}
+
+export function checkFeishuScopes(value, requiredScopes = REQUIRED_FEISHU_SCOPES) {
+  const scopes = String(value || "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const missing = requiredScopes.filter((scope) => !scopes.includes(scope));
+  return {
+    name: "feishu-scopes",
+    ok: missing.length === 0,
+    missing,
+    scopes,
+    message: missing.length
+      ? `缺少飞书权限：${missing.join(", ")}`
+      : "飞书登录和群聊同步权限已覆盖",
+  };
 }
 
 export function checkRuntimeDependencies(dependencies = {}, options = {}) {

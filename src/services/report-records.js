@@ -96,6 +96,21 @@ export function buildRiskFromReport({ projectId, riskSummary, ownerName }) {
   };
 }
 
+export function buildWeeklyReportLookup({ projectId, authorId, weekNumber, milestoneId = null }) {
+  return {
+    projectId: String(projectId || "").trim(),
+    authorId: String(authorId || "").trim(),
+    weekNumber,
+    milestoneId: String(milestoneId || "").trim() || null,
+  };
+}
+
+export function shouldCreateRiskForReportChange(existingReport, risk) {
+  if (!risk?.detail) return false;
+  const previousRisk = String(existingReport?.riskSummary || "").trim();
+  return previousRisk !== risk.detail;
+}
+
 export function buildMilestoneUpdateFromReport(milestone, report) {
   if (!milestone) return null;
   const oldTitle = String(milestone.title || "").trim();
@@ -147,6 +162,7 @@ export function toPublicWeeklyReport(report) {
     milestoneDate: toIsoDate(report.milestoneDate),
     milestoneStatus: milestoneStatusToClient[report.milestoneState] || "planned",
     createdAt: toIsoDateTime(report.createdAt),
+    updatedAt: toIsoDateTime(report.updatedAt || report.createdAt),
   };
 }
 

@@ -4,11 +4,13 @@ import {
   buildMilestoneUpdateFromReport,
   toPublicProjectReportState,
   buildRiskFromReport,
+  buildWeeklyReportLookup,
   buildWeeklyReportDeleteAuditDetail,
   hasMeaningfulReportProgress,
   normalizeMilestoneState,
   parseReportMilestoneDate,
   normalizeReportWeekNumber,
+  shouldCreateRiskForReportChange,
   toPublicWeeklyReport,
 } from "../src/services/report-records.js";
 
@@ -24,6 +26,7 @@ test("toPublicWeeklyReport maps database weekly report to frontend submission sh
     milestoneDate: new Date("2026-06-01T00:00:00.000Z"),
     milestoneState: "PLANNED",
     createdAt: new Date("2026-06-03T02:00:00.000Z"),
+    updatedAt: new Date("2026-06-04T03:00:00.000Z"),
     author: {
       name: "王康旭",
       role: "MEMBER",
@@ -43,6 +46,7 @@ test("toPublicWeeklyReport maps database weekly report to frontend submission sh
     milestoneDate: "2026-06-01",
     milestoneStatus: "planned",
     createdAt: "2026-06-03T02:00:00.000Z",
+    updatedAt: "2026-06-04T03:00:00.000Z",
   });
 });
 
@@ -105,6 +109,38 @@ test("buildRiskFromReport creates a risk only for meaningful risk text", () => {
     status: "OPEN",
     source: "成员填报",
   });
+});
+
+test("buildWeeklyReportLookup scopes duplicate submissions to one author project week milestone", () => {
+  assert.deepEqual(buildWeeklyReportLookup({
+    projectId: " p1 ",
+    authorId: " u1 ",
+    weekNumber: 3,
+    milestoneId: " m1 ",
+  }), {
+    projectId: "p1",
+    authorId: "u1",
+    weekNumber: 3,
+    milestoneId: "m1",
+  });
+  assert.deepEqual(buildWeeklyReportLookup({
+    projectId: "p1",
+    authorId: "u1",
+    weekNumber: 3,
+    milestoneId: "",
+  }), {
+    projectId: "p1",
+    authorId: "u1",
+    weekNumber: 3,
+    milestoneId: null,
+  });
+});
+
+test("shouldCreateRiskForReportChange avoids duplicate risk records for repeated submissions", () => {
+  assert.equal(shouldCreateRiskForReportChange(null, { detail: "接口联调阻塞" }), true);
+  assert.equal(shouldCreateRiskForReportChange({ riskSummary: "接口联调阻塞" }, { detail: "接口联调阻塞" }), false);
+  assert.equal(shouldCreateRiskForReportChange({ riskSummary: "接口联调阻塞" }, { detail: "供应商资源不足" }), true);
+  assert.equal(shouldCreateRiskForReportChange({ riskSummary: "" }, null), false);
 });
 
 test("buildMilestoneUpdateFromReport records milestone changes from weekly report", () => {

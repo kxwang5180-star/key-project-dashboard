@@ -3325,6 +3325,7 @@ button:disabled {
     linear-gradient(135deg, color-mix(in srgb, var(--project-color, var(--blue)) 7%, white), rgba(255, 255, 255, 0.95)),
     #fff;
   padding: 12px;
+  cursor: pointer;
 }
 
 .metric-visual-card.is-number,
@@ -3340,6 +3341,48 @@ button:disabled {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--project-color, var(--blue)) 14%, var(--line));
   opacity: 0.72;
+}
+
+.metric-visual-card.is-expanded {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.metric-detail-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.metric-detail-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.metric-detail-panel b,
+.submission-detail b {
+  margin-right: 8px;
+  color: var(--ink);
+}
+
+.metric-history-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metric-history-list span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink-soft);
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .metric-note-field {
@@ -3489,7 +3532,7 @@ button:disabled {
 
 .metric-maintenance-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.9fr) minmax(118px, 0.7fr) minmax(118px, 0.7fr) minmax(160px, 1fr) auto auto;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(118px, 0.7fr) minmax(118px, 0.7fr) minmax(220px, 1.25fr) auto;
   gap: 9px;
   align-items: end;
   border: 1px solid var(--line);
@@ -3506,7 +3549,8 @@ button:disabled {
   font-weight: 760;
 }
 
-.metric-maintenance-row input {
+.metric-maintenance-row input,
+.metric-maintenance-row textarea {
   width: 100%;
   min-height: 34px;
   border: 1px solid var(--line);
@@ -3517,9 +3561,24 @@ button:disabled {
   outline: none;
 }
 
-.metric-maintenance-row input:focus {
+.metric-maintenance-row textarea {
+  min-height: 58px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.metric-maintenance-row input:focus,
+.metric-maintenance-row textarea:focus {
   border-color: rgba(37, 99, 235, 0.55);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.metric-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ghost-danger {
@@ -3738,6 +3797,15 @@ button:disabled {
   padding: 12px;
 }
 
+.submission-item {
+  cursor: pointer;
+}
+
+.submission-item.is-expanded {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: #fff;
+}
+
 .submission-item header {
   display: flex;
   align-items: flex-start;
@@ -3758,6 +3826,18 @@ button:disabled {
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.submission-detail {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.submission-detail p {
+  margin: 0;
 }
 
 .submission-item footer {

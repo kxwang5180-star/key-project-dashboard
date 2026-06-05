@@ -4,6 +4,7 @@ import vm from "node:vm";
 import { PrismaClient, GovernanceLevel, MilestoneStatus, ProjectStage } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config } from "../src/config.js";
+import { metricSeedKey, milestoneSeedKey, planSeedRecordReconciliation } from "../src/services/seed-sync-records.js";
 
 const prisma = new PrismaClient();
 
@@ -14,10 +15,24 @@ function cleanProjectName(name) {
     .trim();
 }
 
+function canonicalProjectKey(name) {
+  const aliases = {
+    合同系统: "合同管理系统",
+    大排档赋值台计数: "大排档赋值计数",
+  };
+  const cleanName = cleanProjectName(name);
+  return aliases[cleanName] || cleanName;
+}
+
 function compactText(text, maxLength = 86) {
   const value = String(text || "").replace(/\s+/g, " ").trim();
   if (!value) return "";
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function parseMetricNumber(value) {
+  const match = String(value || "").replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
 }
 
 function splitLines(text) {
@@ -112,97 +127,224 @@ async function readSourceRows() {
     window: {},
   };
   vm.runInNewContext(raw, sandbox, { filename: "data.js" });
-  return Array.isArray(sandbox.window.PROJECT_SOURCE) ? sandbox.window.PROJECT_SOURCE : [];
+  return {
+    projects: Array.isArray(sandbox.window.PROJECT_SOURCE) ? sandbox.window.PROJECT_SOURCE : [],
+    milestones: Array.isArray(sandbox.window.PROJECT_MILESTONE_SOURCE) ? sandbox.window.PROJECT_MILESTONE_SOURCE : [],
+    metrics: Array.isArray(sandbox.window.PROJECT_METRIC_SOURCE) ? sandbox.window.PROJECT_METRIC_SOURCE : [],
+  };
 }
 
-async function seedProjects(rows) {
+function parseExplicitMilestoneDate(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "待定") return null;
+  const match = text.match(/^(20\d{2})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!match) return null;
+  return makeDateInfo(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+function buildMilestoneSeedData({ item, index, projectId, hasExplicitMilestones }) {
+  const dateInfo = item.date ? parseExplicitMilestoneDate(item.date) : parseDateFromText(item.line);
+  const title = hasExplicitMilestones ? item.line : cleanMilestoneTitle(item.line) || item.line;
+  return {
+    projectId,
+    title,
+    source: item.source,
+    rawText: item.line,
+    dueDate: dateInfo?.date || null,
+    status: inferMilestoneStatus(item.line, dateInfo),
+    sortOrder: index,
+  };
+}
+
+function buildMetricSeedData({ metric, index, projectId }) {
+  return {
+    projectId,
+    name: metric.name || `指标 ${index + 1}`,
+    currentValue: metric.currentValue || null,
+    targetValue: metric.targetValue || null,
+    observation: metric.observation || null,
+    chartType: parseMetricNumber(metric.targetValue) !== null ? "donut" : "value",
+    sortOrder: index,
+  };
+}
+
+async function reconcileMilestones(tx, projectId, desiredMilestones) {
+  const existingMilestones = await tx.milestone.findMany({
+    where: { projectId },
+    include: { _count: { select: { reports: true } } },
+  });
+  const plan = planSeedRecordReconciliation({
+    existingRecords: existingMilestones,
+    desiredRecords: desiredMilestones,
+    getExistingKey: milestoneSeedKey,
+    getDesiredKey: milestoneSeedKey,
+    relationName: "reports",
+  });
+
+  for (const { existing, desired } of plan.updates) {
+    await tx.milestone.update({
+      where: { id: existing.id },
+      data: desired,
+    });
+  }
+
+  if (plan.creates.length) {
+    await tx.milestone.createMany({ data: plan.creates });
+  }
+
+  if (plan.deleteIds.length) {
+    await tx.milestone.deleteMany({ where: { id: { in: plan.deleteIds } } });
+  }
+
+  for (const [index, milestone] of plan.archive.entries()) {
+    await tx.milestone.update({
+      where: { id: milestone.id },
+      data: {
+        source: "历史里程碑",
+        status: MilestoneStatus.CHANGED,
+        sortOrder: desiredMilestones.length + index,
+        changeSummary: milestone.changeSummary || "标准清单同步后保留历史填报关联",
+      },
+    });
+  }
+}
+
+async function reconcileMetrics(tx, projectId, desiredMetrics) {
+  const existingMetrics = await tx.metric.findMany({
+    where: { projectId },
+    include: { _count: { select: { records: true } } },
+  });
+  const plan = planSeedRecordReconciliation({
+    existingRecords: existingMetrics,
+    desiredRecords: desiredMetrics,
+    getExistingKey: metricSeedKey,
+    getDesiredKey: metricSeedKey,
+    relationName: "records",
+  });
+
+  for (const { existing, desired } of plan.updates) {
+    await tx.metric.update({
+      where: { id: existing.id },
+      data: desired,
+    });
+  }
+
+  for (const desired of plan.creates) {
+    await tx.metric.create({ data: desired });
+  }
+
+  if (plan.deleteIds.length) {
+    await tx.metric.deleteMany({ where: { id: { in: plan.deleteIds } } });
+  }
+
+  for (const [index, metric] of plan.archive.entries()) {
+    await tx.metric.update({
+      where: { id: metric.id },
+      data: {
+        sortOrder: desiredMetrics.length + index,
+        observation: metric.observation || "标准清单同步后保留历史指标记录",
+      },
+    });
+  }
+}
+
+async function seedProjects(rows, structuredMilestones = [], structuredMetrics = []) {
   await prisma.governanceTask.deleteMany();
+  const milestoneRowsByProject = structuredMilestones.reduce((map, milestone) => {
+    const key = canonicalProjectKey(milestone.projectName);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(milestone);
+    return map;
+  }, new Map());
+  const metricRowsByProject = structuredMetrics.reduce((map, metric) => {
+    const key = canonicalProjectKey(metric.projectName);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(metric);
+    return map;
+  }, new Map());
 
   for (const row of rows) {
     const shortName = cleanProjectName(row.name);
-    const metrics = extractMetricHighlights(row.metricsText);
-    const milestones = [
-      ...splitLines(row.mayKeyNodes).map((line) => ({ line, source: "5月关键节点" })),
-      ...splitLines(row.futureMilestones).map((line) => ({ line, source: "未来里程碑" })),
-    ];
+    const explicitMetrics = metricRowsByProject.get(canonicalProjectKey(row.name)) || [];
+    const metrics = explicitMetrics.length
+      ? explicitMetrics.map((metric) => ({
+          name: metric.name,
+          currentValue: metric.current,
+          targetValue: metric.target,
+          observation: metric.observation,
+        }))
+      : extractMetricHighlights(row.metricsText);
+    const explicitMilestones = milestoneRowsByProject.get(canonicalProjectKey(row.name)) || [];
+    const milestones = explicitMilestones.length
+      ? explicitMilestones.map((milestone) => ({
+          line: milestone.title,
+          source: "标准里程碑",
+          date: milestone.date,
+        }))
+      : [
+          ...splitLines(row.mayKeyNodes).map((line) => ({ line, source: "5月关键节点" })),
+          ...splitLines(row.futureMilestones).map((line) => ({ line, source: "未来里程碑" })),
+        ];
 
-    await prisma.project.upsert({
-      where: { id: row.id },
-      update: {
-        name: row.name,
-        shortName,
-        businessLine: row.businessLine || "未填业务线",
-        description: row.overallText || "",
-        metricsSummary: row.metricsText || "",
-        keyNodesSummary: row.mayKeyNodes || "",
-        futurePlan: row.futureMilestones || "",
-        teamSummary: row.teamText || "",
-        established: row.established === "是",
-        isKeyProject: row.isKeyProject === "是",
-        stage: row.established === "是" ? ProjectStage.IN_PROGRESS : ProjectStage.PLANNED,
-      },
-      create: {
-        id: row.id,
-        name: row.name,
-        shortName,
-        businessLine: row.businessLine || "未填业务线",
-        description: row.overallText || "",
-        metricsSummary: row.metricsText || "",
-        keyNodesSummary: row.mayKeyNodes || "",
-        futurePlan: row.futureMilestones || "",
-        teamSummary: row.teamText || "",
-        established: row.established === "是",
-        isKeyProject: row.isKeyProject === "是",
-        stage: row.established === "是" ? ProjectStage.IN_PROGRESS : ProjectStage.PLANNED,
-      },
-    });
-
-    await prisma.milestone.deleteMany({ where: { projectId: row.id } });
-    await prisma.metric.deleteMany({ where: { projectId: row.id } });
-
-    if (milestones.length) {
-      await prisma.milestone.createMany({
-        data: milestones.map((item, index) => {
-          const dateInfo = parseDateFromText(item.line);
-          const title = cleanMilestoneTitle(item.line) || item.line;
-          return {
-            projectId: row.id,
-            title,
-            source: item.source,
-            rawText: item.line,
-            dueDate: dateInfo?.date || null,
-            status: inferMilestoneStatus(item.line, dateInfo),
-            sortOrder: index,
-          };
-        }),
-      });
-    }
-
-    await prisma.metric.createMany({
-      data: (metrics.length ? metrics : [{ name: "项目指标", currentValue: "", targetValue: "", observation: compactText(row.metricsText, 90) }]).map(
-        (metric, index) => ({
-          projectId: row.id,
-          name: metric.name || `指标 ${index + 1}`,
-          currentValue: metric.currentValue || null,
-          targetValue: metric.targetValue || null,
-          observation: metric.observation || null,
-          chartType: metric.targetValue ? "donut" : "value",
-          sortOrder: index,
-        })
-      ),
-    });
-
-    if (row.established !== "是") {
-      await prisma.governanceTask.create({
-        data: {
-          projectId: row.id,
-          taskType: "立项治理",
-          title: "重点项目尚未正式立项",
-          detail: "需要确认项目治理口径、资源归属与后续追踪方式。",
-          level: GovernanceLevel.HIGH,
+    await prisma.$transaction(async (tx) => {
+      await tx.project.upsert({
+        where: { id: row.id },
+        update: {
+          name: row.name,
+          shortName,
+          ownerName: row.owner || null,
+          businessLine: row.businessLine || "未填业务线",
+          description: row.overallText || "",
+          metricsSummary: row.metricsText || "",
+          keyNodesSummary: row.mayKeyNodes || "",
+          futurePlan: row.futureMilestones || "",
+          teamSummary: row.teamText || "",
+          established: row.established === "是",
+          isKeyProject: row.isKeyProject === "是",
+          stage: row.established === "是" ? ProjectStage.IN_PROGRESS : ProjectStage.PLANNED,
+        },
+        create: {
+          id: row.id,
+          name: row.name,
+          shortName,
+          ownerName: row.owner || null,
+          businessLine: row.businessLine || "未填业务线",
+          description: row.overallText || "",
+          metricsSummary: row.metricsText || "",
+          keyNodesSummary: row.mayKeyNodes || "",
+          futurePlan: row.futureMilestones || "",
+          teamSummary: row.teamText || "",
+          established: row.established === "是",
+          isKeyProject: row.isKeyProject === "是",
+          stage: row.established === "是" ? ProjectStage.IN_PROGRESS : ProjectStage.PLANNED,
         },
       });
-    }
+
+      await reconcileMilestones(
+        tx,
+        row.id,
+        milestones.map((item, index) =>
+          buildMilestoneSeedData({ item, index, projectId: row.id, hasExplicitMilestones: Boolean(explicitMilestones.length) })
+        )
+      );
+
+      const metricSeedData = (metrics.length ? metrics : [{ name: "项目指标", currentValue: "", targetValue: "", observation: compactText(row.metricsText, 90) }]).map(
+        (metric, index) => buildMetricSeedData({ metric, index, projectId: row.id })
+      );
+      await reconcileMetrics(tx, row.id, metricSeedData);
+
+      if (row.established !== "是") {
+        await tx.governanceTask.create({
+          data: {
+            projectId: row.id,
+            taskType: "立项治理",
+            title: "重点项目尚未正式立项",
+            detail: "需要确认项目治理口径、资源归属与后续追踪方式。",
+            level: GovernanceLevel.HIGH,
+          },
+        });
+      }
+    });
   }
 }
 
@@ -225,10 +367,10 @@ async function ensureAdmin() {
 }
 
 async function main() {
-  const rows = await readSourceRows();
+  const { projects, milestones, metrics } = await readSourceRows();
   await ensureAdmin();
-  await seedProjects(rows);
-  console.log(`Seed completed: ${rows.length} projects imported.`);
+  await seedProjects(projects, milestones, metrics);
+  console.log(`Seed completed: ${projects.length} projects imported.`);
 }
 
 main()

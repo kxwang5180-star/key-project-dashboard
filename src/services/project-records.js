@@ -105,12 +105,13 @@ export function buildProjectMetricCreateData(metric, { projectId, index = 0 }) {
     .slice(-8);
 
   const metricId = String(metric?.id || "").trim();
+  const observation = String(metric?.observation || metric?.calculation || metric?.formula || "").trim();
   const data = {
     projectId,
     name: String(metric?.name || `指标 ${index + 1}`).trim(),
     currentValue: String(metric?.currentValue || metric?.current || "").trim() || null,
     targetValue: String(metric?.targetValue || metric?.target || "").trim() || null,
-    observation: String(metric?.observation || "").trim() || null,
+    observation: observation || null,
     chartType: String(metric?.chartType || "").trim() || null,
     sortOrder: index,
   };
@@ -126,6 +127,14 @@ export function buildProjectMetricCreateData(metric, { projectId, index = 0 }) {
   }
 
   return data;
+}
+
+export function splitMetricCreateDataForUpdate(metricData) {
+  const { id: _id, records, ...data } = metricData || {};
+  return {
+    data,
+    records: records?.createMany?.data || [],
+  };
 }
 
 export function buildProjectMilestoneCreateData(milestone, { projectId, index = 0 }) {

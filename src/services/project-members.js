@@ -4,6 +4,7 @@ import { fetchAndResolveFeishuChatMembers } from "./feishu-chat-sync.js";
 import {
   buildFeishuChatMemberRecord,
   buildProjectMemberRecord,
+  buildUserMembershipLinkWhere,
   buildUserProjectMemberConditions,
   chooseChatMemberSyncMembers,
   normalizeEmail,
@@ -44,14 +45,15 @@ export async function canUserMaintainProject(user, projectId) {
 
 export async function ensureUserProjectMembershipLinks(user) {
   if (!user) return;
-  const conditions = buildUserProjectMemberConditions(user).filter((condition) => !condition.userId);
-  if (!conditions.length) return;
+  const where = buildUserMembershipLinkWhere(user);
+  if (!where) return;
 
   await prisma.projectMember.updateMany({
-    where: {
-      userId: null,
-      OR: conditions,
-    },
+    where,
+    data: { userId: user.id },
+  });
+  await prisma.feishuChatMember.updateMany({
+    where,
     data: { userId: user.id },
   });
 }

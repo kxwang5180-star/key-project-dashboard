@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildJsonApiCheck,
+  checkFeishuRedirectUri,
+  checkFeishuScopes,
   checkDependencyLockfile,
   checkRuntimeDependencies,
   checkRequiredEnv,
@@ -29,6 +31,20 @@ test("checkUrl rejects unsafe or malformed deployment URLs", () => {
   assert.equal(checkUrl("PUBLIC_BASE_URL", "https://example.com").ok, true);
   assert.equal(checkUrl("PUBLIC_BASE_URL", "ftp://example.com").ok, false);
   assert.equal(checkUrl("PUBLIC_BASE_URL", "not a url").ok, false);
+});
+
+test("checkFeishuRedirectUri requires the OAuth callback path", () => {
+  assert.equal(checkFeishuRedirectUri("https://example.com/api/auth/feishu/callback").ok, true);
+  const check = checkFeishuRedirectUri("https://example.com/login");
+  assert.equal(check.ok, false);
+  assert.match(check.message, /\/api\/auth\/feishu\/callback/);
+});
+
+test("checkFeishuScopes requires login and chat sync permissions", () => {
+  const check = checkFeishuScopes("contact:user.base:readonly auth:user.id:read im:chat:read");
+  assert.equal(check.ok, false);
+  assert.deepEqual(check.missing, ["im:chat.members:read"]);
+  assert.match(check.message, /缺少飞书权限/);
 });
 
 test("checkRuntimeDependencies reports missing runtime packages", () => {

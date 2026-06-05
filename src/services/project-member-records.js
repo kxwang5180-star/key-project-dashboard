@@ -19,6 +19,15 @@ export function buildUserProjectMemberConditions(user) {
   ].filter(Boolean);
 }
 
+export function buildUserMembershipLinkWhere(user) {
+  const conditions = buildUserProjectMemberConditions(user).filter((condition) => !condition.userId);
+  if (!conditions.length) return null;
+  return {
+    userId: null,
+    OR: conditions,
+  };
+}
+
 export function chooseChatMemberSyncMembers({ storedMembers = [], liveMembers = [], preferLive = false } = {}) {
   const stored = Array.isArray(storedMembers) ? storedMembers : [];
   const live = Array.isArray(liveMembers) ? liveMembers : [];

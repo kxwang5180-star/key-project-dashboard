@@ -39,7 +39,8 @@ test("getMilestoneReportPreview filters reports by milestone and supports collap
   const reports = [
     { id: "r1", projectId: "p1", milestoneId: "m1", week: 1 },
     { id: "r2", projectId: "p1", milestoneId: "m2", week: 1 },
-    { id: "r3", projectId: "p1", milestoneId: "m1", week: 2 },
+    { id: "r3", projectId: "p1", milestoneId: "m1", week: 2, updatedAt: "2026-06-02T00:00:00.000Z" },
+    { id: "r5", projectId: "p1", milestoneId: "m1", week: 2, updatedAt: "2026-06-03T00:00:00.000Z" },
     { id: "r4", projectId: "p2", milestoneId: "m1", week: 1 },
   ];
 
@@ -52,10 +53,10 @@ test("getMilestoneReportPreview filters reports by milestone and supports collap
     }),
     {
       reports: [
-        { id: "r3", projectId: "p1", milestoneId: "m1", week: 2 },
+        { id: "r5", projectId: "p1", milestoneId: "m1", week: 2, updatedAt: "2026-06-03T00:00:00.000Z" },
       ],
-      total: 2,
-      hiddenCount: 1,
+      total: 3,
+      hiddenCount: 2,
       isExpanded: false,
     }
   );
@@ -80,11 +81,12 @@ test("getLatestProjectReport returns the newest weekly report for a project", ()
       { id: "r1", projectId: "p1", week: 5, createdAt: "2026-06-01T00:00:00.000Z" },
       { id: "r2", projectId: "p2", week: 6, createdAt: "2026-06-04T00:00:00.000Z" },
       { id: "r3", projectId: "p1", week: 6, createdAt: "2026-06-03T00:00:00.000Z" },
+      { id: "r4", projectId: "p1", week: 5, createdAt: "2026-06-01T00:00:00.000Z", updatedAt: "2026-06-05T00:00:00.000Z" },
     ],
     "p1"
   );
 
-  assert.equal(latest.id, "r3");
+  assert.equal(latest.id, "r4");
 });
 
 test("formatProjectStageLabel hides raw enum stage labels", () => {

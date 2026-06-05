@@ -7,9 +7,17 @@ import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canManageIdentity } from "../lib/auth.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
 import { resolveProjectChatSelection } from "../services/project-chat-records.js";
-import { buildProjectMetricCreateData, buildProjectMilestoneCreateData, toPublicProjectBrief, toPublicProjectMaintenanceState } from "../services/project-records.js";
+import { resolveProjectMaintenanceAccess } from "../services/project-maintenance-records.js";
+import {
+  buildProjectMetricCreateData,
+  buildProjectMilestoneCreateData,
+  splitMetricCreateDataForUpdate,
+  toPublicProjectBrief,
+  toPublicProjectMaintenanceState,
+} from "../services/project-records.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import { buildProjectChatAuditDetail } from "../services/audit-log-records.js";
+import { metricSeedKey, milestoneSeedKey, planSeedRecordReconciliation, withoutId } from "../services/seed-sync-records.js";
 
 export const projectRouter = Router();
 
@@ -109,9 +117,13 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
 }));
 
 projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
-  if (!(await canUserMaintainProject(req.user, req.params.id))) {
-    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
-  }
+  const existingProject = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  const access = resolveProjectMaintenanceAccess({
+    project: existingProject,
+    canMaintain: existingProject ? await canUserMaintainProject(req.user, req.params.id) : false,
+  });
+  if (!access.ok) return res.status(access.status).json({ message: access.message });
+
   const { ownerName, businessLine, description, teamSummary, stage, changeSummary } = req.body || {};
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -141,18 +153,55 @@ projectRouter.put("/:id/brief", asyncRoute(async (req, res) => {
 }));
 
 projectRouter.put("/:id/metrics", asyncRoute(async (req, res) => {
-  if (!(await canUserMaintainProject(req.user, req.params.id))) {
-    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
-  }
+  const existingProject = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  const access = resolveProjectMaintenanceAccess({
+    project: existingProject,
+    canMaintain: existingProject ? await canUserMaintainProject(req.user, req.params.id) : false,
+  });
+  if (!access.ok) return res.status(access.status).json({ message: access.message });
+
   const metrics = Array.isArray(req.body?.metrics) ? req.body.metrics : [];
   const projectState = await prisma.$transaction(async (tx) => {
-    await tx.metric.deleteMany({ where: { projectId: req.params.id } });
-    if (metrics.length) {
-      for (const [index, metric] of metrics.entries()) {
-        await tx.metric.create({
-          data: buildProjectMetricCreateData(metric, { projectId: req.params.id, index }),
+    const desiredMetrics = metrics.map((metric, index) => buildProjectMetricCreateData(metric, { projectId: req.params.id, index }));
+    const existingMetrics = await tx.metric.findMany({
+      where: { projectId: req.params.id },
+      include: { _count: { select: { records: true } } },
+    });
+    const metricPlan = planSeedRecordReconciliation({
+      existingRecords: existingMetrics,
+      desiredRecords: desiredMetrics,
+      getExistingKey: metricSeedKey,
+      getDesiredKey: metricSeedKey,
+      relationName: "records",
+      preferDesiredId: true,
+    });
+    for (const { existing, desired } of metricPlan.updates) {
+      const update = splitMetricCreateDataForUpdate(desired);
+      await tx.metric.update({
+        where: { id: existing.id },
+        data: update.data,
+      });
+      if (update.records.length) {
+        await tx.metricRecord.deleteMany({ where: { metricId: existing.id } });
+        await tx.metricRecord.createMany({
+          data: update.records.map((record) => ({ ...record, metricId: existing.id })),
         });
       }
+    }
+    for (const desired of metricPlan.creates) {
+      await tx.metric.create({ data: desired });
+    }
+    if (metricPlan.deleteIds.length) {
+      await tx.metric.deleteMany({ where: { id: { in: metricPlan.deleteIds } } });
+    }
+    for (const [index, metric] of metricPlan.archive.entries()) {
+      await tx.metric.update({
+        where: { id: metric.id },
+        data: {
+          sortOrder: desiredMetrics.length + index,
+          observation: metric.observation || "指标已从当前维护清单移除，因存在历史记录予以保留",
+        },
+      });
     }
     await writeAuditLog({
       client: tx,
@@ -180,15 +229,49 @@ projectRouter.put("/:id/metrics", asyncRoute(async (req, res) => {
 }));
 
 projectRouter.put("/:id/milestones", asyncRoute(async (req, res) => {
-  if (!(await canUserMaintainProject(req.user, req.params.id))) {
-    return res.status(403).json({ message: "你不在该项目群聊成员中，不能维护该项目" });
-  }
+  const existingProject = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  const access = resolveProjectMaintenanceAccess({
+    project: existingProject,
+    canMaintain: existingProject ? await canUserMaintainProject(req.user, req.params.id) : false,
+  });
+  if (!access.ok) return res.status(access.status).json({ message: access.message });
+
   const milestones = Array.isArray(req.body?.milestones) ? req.body.milestones : [];
   const projectState = await prisma.$transaction(async (tx) => {
-    await tx.milestone.deleteMany({ where: { projectId: req.params.id } });
-    if (milestones.length) {
-      await tx.milestone.createMany({
-        data: milestones.map((milestone, index) => buildProjectMilestoneCreateData(milestone, { projectId: req.params.id, index })),
+    const desiredMilestones = milestones.map((milestone, index) => buildProjectMilestoneCreateData(milestone, { projectId: req.params.id, index }));
+    const existingMilestones = await tx.milestone.findMany({
+      where: { projectId: req.params.id },
+      include: { _count: { select: { reports: true } } },
+    });
+    const milestonePlan = planSeedRecordReconciliation({
+      existingRecords: existingMilestones,
+      desiredRecords: desiredMilestones,
+      getExistingKey: milestoneSeedKey,
+      getDesiredKey: milestoneSeedKey,
+      relationName: "reports",
+      preferDesiredId: true,
+    });
+    for (const { existing, desired } of milestonePlan.updates) {
+      await tx.milestone.update({
+        where: { id: existing.id },
+        data: withoutId(desired),
+      });
+    }
+    if (milestonePlan.creates.length) {
+      await tx.milestone.createMany({ data: milestonePlan.creates });
+    }
+    if (milestonePlan.deleteIds.length) {
+      await tx.milestone.deleteMany({ where: { id: { in: milestonePlan.deleteIds } } });
+    }
+    for (const [index, milestone] of milestonePlan.archive.entries()) {
+      await tx.milestone.update({
+        where: { id: milestone.id },
+        data: {
+          source: "历史里程碑",
+          status: "CHANGED",
+          sortOrder: desiredMilestones.length + index,
+          changeSummary: milestone.changeSummary || "里程碑已从当前维护清单移除，因存在周报关联予以保留",
+        },
       });
     }
     await writeAuditLog({
