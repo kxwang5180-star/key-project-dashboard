@@ -40,7 +40,7 @@ reportRouter.get("/", asyncRoute(async (req, res) => {
   res.json({ reports: reports.map((report) => toPublicWeeklyReport(report)) });
 }));
 
-reportRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+async function deleteWeeklyReportById(req, res) {
   const report = await prisma.weeklyReport.findUnique({
     where: { id: req.params.id },
     select: {
@@ -67,7 +67,10 @@ reportRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) =
   });
 
   res.json({ ok: true, deletedId: report.id });
-}));
+}
+
+reportRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(deleteWeeklyReportById));
+reportRouter.post("/:id/delete", requireRoles("ADMIN"), asyncRoute(deleteWeeklyReportById));
 
 reportRouter.post("/", asyncRoute(async (req, res) => {
   const {

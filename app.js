@@ -21,6 +21,7 @@ import {
   getVisibleCalendarEvents,
   getWeekRangeSummary,
 } from "./src/ui/report-experience.js";
+import { hasMeaningfulReportProgress } from "./src/services/report-records.js";
 import { mergeBootstrapProjects } from "./src/ui/project-bootstrap.js";
 import { buildProjectUserGroups } from "./src/ui/identity-groups.js";
 
@@ -565,9 +566,18 @@ async function saveWeeklyReport(report) {
 }
 
 async function deleteWeeklyReport(reportId) {
-  return apiRequest(`/api/reports/${encodeURIComponent(reportId)}`, {
-    method: "DELETE",
-  });
+  const encodedId = encodeURIComponent(reportId);
+  try {
+    return await apiRequest(`/api/reports/${encodedId}`, {
+      method: "DELETE",
+    });
+  } catch (error) {
+    if (error.status !== 404) throw error;
+    return apiRequest(`/api/reports/${encodedId}/delete`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  }
 }
 
 function getFeishuChatById(chatId) {
@@ -1911,10 +1921,6 @@ function renderDetail() {
         <strong>${escapeHtml(project.owner || "未填写")}</strong>
       </article>
       <article>
-        <span>业务线</span>
-        <strong>${escapeHtml(project.businessLine || "未填业务线")}</strong>
-      </article>
-      <article>
         <span>当前阶段</span>
         <strong>${escapeHtml(formatProjectStageLabel(project.stage))}</strong>
       </article>
@@ -1923,6 +1929,11 @@ function renderDetail() {
       <h3>项目概述</h3>
       ${renderTextBlock(project.overallText)}
     </div>
+    <div class="detail-block">
+      <h3>项目指标</h3>
+      ${renderDetailMetricBlock(project)}
+    </div>
+    <div class="detail-block">${renderTextBlock(project.metricsText, "暂无指标说明")}</div>
     <div class="detail-block">
       <h3>项目组构成</h3>
       ${renderTeamCards(project.team)}
@@ -1940,13 +1951,6 @@ function renderDetail() {
         <div class="timeline">${milestones.join("") || '<p class="muted-text">暂无可识别里程碑</p>'}</div>
       </div>
     `,
-    metrics: `
-      <div class="detail-block">
-        <h3>项目指标</h3>
-        ${renderDetailMetricBlock(project)}
-      </div>
-      <div class="detail-block">${renderTextBlock(project.metricsText, "暂无指标说明")}</div>
-    `,
     updates: `
       <div class="detail-block">
         <h3>成员更新记录</h3>
@@ -1963,16 +1967,13 @@ function renderDetail() {
   const tabs = [
     { key: "overview", label: "概览" },
     { key: "milestones", label: "里程碑" },
-    { key: "metrics", label: "指标" },
     { key: "updates", label: "更新" },
     { key: "risks", label: "风险" },
   ];
+  if (state.detailTab === "metrics") state.detailTab = "overview";
   if (!tabContent[state.detailTab]) state.detailTab = "overview";
 
   container.innerHTML = `
-    <div class="detail-kicker">
-      <span class="phase-pill">${escapeHtml(project.businessLine || "未填业务线")}</span>
-    </div>
     <div class="detail-title">
       <h2>${escapeHtml(project.shortName)}</h2>
       <p>${escapeHtml(formatProjectStageLabel(project.stage))} · ${
@@ -2465,12 +2466,7 @@ function getReportFormValue(name) {
 }
 
 function hasMeaningfulProgress(text) {
-  const normalized = String(text || "")
-    .replace(/第\d+周更新/g, "")
-    .replace(/已完成|进行中|下周计划|需要协调|阻塞点|预计恢复时间/g, "")
-    .replace(/[：:\s。；;，,、\-—]/g, "")
-    .trim();
-  return normalized.length >= 3;
+  return hasMeaningfulReportProgress(text);
 }
 
 function getMetricReadiness(project) {
@@ -2503,12 +2499,12 @@ function renderReportStatusPanel() {
   const metricStatus = getMetricReadiness(project);
   const milestoneTitle = milestone.title;
   const milestoneDate = milestone.dateInfo?.key || "";
-  const progressText = savedReport?.progress || "";
-  const riskText = savedReport?.risk || "";
+  const progressText = savedReport?.progress || getReportFormValue("progress");
+  const riskText = savedReport?.risk || getReportFormValue("risk");
   const items = [
     {
       label: "进展",
-      done: Boolean(progressText),
+      done: hasMeaningfulProgress(progressText),
       hint: progressText ? compactText(progressText, 34) : "建议按已完成 / 进行中 / 下周计划填写",
     },
     {
@@ -2541,7 +2537,7 @@ function renderReportStatusPanel() {
       </div>
       <div class="status-copy">
         <b>${escapeHtml(statusText)}</b>
-        <p>${savedReport ? `最近保存：${escapeHtml(savedTime)}` : "保存后将同步到管理看板、项目详情和 PMO 未更新检查"}</p>
+        ${savedReport ? `<p>最近保存：${escapeHtml(savedTime)}</p>` : ""}
       </div>
     </article>
     ${state.saveNotice ? `<div class="save-notice">${escapeHtml(state.saveNotice)}</div>` : ""}
@@ -3981,6 +3977,7 @@ memberReportForm.addEventListener("input", (event) => {
       refreshMilestoneMaintenanceViews({ syncFields: false });
     }
     state.saveNotice = "";
+    renderReportStatusPanel();
   }
 });
 

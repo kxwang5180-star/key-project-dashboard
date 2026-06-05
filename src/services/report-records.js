@@ -40,12 +40,19 @@ export function normalizeReportWeekNumber(value) {
 }
 
 export function hasMeaningfulReportProgress(text) {
-  const normalized = String(text || "")
-    .replace(/第\d+周更新/g, "")
-    .replace(/已完成|进行中|下周计划|需要协调|阻塞点|预计恢复时间/g, "")
-    .replace(/[：:\s。；;，,、\-—]/g, "")
-    .trim();
-  return normalized.length >= 3;
+  const lines = String(text || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const meaningfulLines = lines.filter((line) => {
+    const normalized = line
+      .replace(/^第\d+周更新\s*[:：]?/, "")
+      .replace(/^(已完成|进行中|下周计划|需要协调|阻塞点|预计恢复时间)\s*[:：]?\s*/, "")
+      .replace(/[：:\s。；;，,、\-—]/g, "")
+      .trim();
+    return normalized.length >= 3;
+  });
+  return meaningfulLines.length > 0;
 }
 
 function toIsoDate(value) {

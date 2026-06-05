@@ -89,6 +89,7 @@ test("hasMeaningfulReportProgress rejects template-only progress text", () => {
   assert.equal(hasMeaningfulReportProgress("第6周更新\n已完成：\n进行中：\n下周计划：\n需要协调："), false);
   assert.equal(hasMeaningfulReportProgress("   "), false);
   assert.equal(hasMeaningfulReportProgress("本周完成联调并进入试运行。"), true);
+  assert.equal(hasMeaningfulReportProgress("已完成：完成合同系统联调\n进行中：整理验收材料"), true);
 });
 
 test("buildRiskFromReport creates a risk only for meaningful risk text", () => {
