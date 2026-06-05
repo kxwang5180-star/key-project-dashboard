@@ -33,6 +33,21 @@ export function normalizeMilestoneState(value) {
   return milestoneStatusFromClient[raw] || (milestoneStatusToClient[raw] ? raw : null);
 }
 
+export function normalizeReportWeekNumber(value) {
+  const week = Number(value);
+  if (!Number.isInteger(week) || week < 1 || week > 52) return null;
+  return week;
+}
+
+export function hasMeaningfulReportProgress(text) {
+  const normalized = String(text || "")
+    .replace(/第\d+周更新/g, "")
+    .replace(/已完成|进行中|下周计划|需要协调|阻塞点|预计恢复时间/g, "")
+    .replace(/[：:\s。；;，,、\-—]/g, "")
+    .trim();
+  return normalized.length >= 3;
+}
+
 function toIsoDate(value) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
@@ -44,6 +59,20 @@ function toIsoDateTime(value) {
   if (!value) return new Date().toISOString();
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function parseDateKey(value) {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map((part) => Number(part));
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+  return date;
+}
+
+export function parseReportMilestoneDate(value) {
+  return parseDateKey(value);
 }
 
 export function buildRiskFromReport({ projectId, riskSummary, ownerName }) {
@@ -66,9 +95,8 @@ export function buildMilestoneUpdateFromReport(milestone, report) {
   const oldDate = toIsoDate(milestone.dueDate);
   const oldStatus = milestone.status || "PLANNED";
   const nextTitle = String(report.milestoneTitle || oldTitle).trim() || oldTitle;
-  const nextDateKey = String(report.milestoneDate || oldDate).trim();
-  let nextDueDate = nextDateKey ? new Date(`${nextDateKey}T00:00:00.000Z`) : null;
-  if (nextDueDate && Number.isNaN(nextDueDate.getTime())) nextDueDate = null;
+  const reportDate = String(report.milestoneDate || "").trim();
+  const nextDueDate = reportDate ? parseDateKey(reportDate) || milestone.dueDate || null : milestone.dueDate || null;
   const nextDate = toIsoDate(nextDueDate);
   const nextStatus = normalizeMilestoneState(report.milestoneState) || oldStatus;
   const changedParts = [];

@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildJsonApiCheck,
+  checkDependencyLockfile,
+  checkRuntimeDependencies,
   checkRequiredEnv,
   checkUrl,
   summarizeChecks,
@@ -27,6 +29,43 @@ test("checkUrl rejects unsafe or malformed deployment URLs", () => {
   assert.equal(checkUrl("PUBLIC_BASE_URL", "https://example.com").ok, true);
   assert.equal(checkUrl("PUBLIC_BASE_URL", "ftp://example.com").ok, false);
   assert.equal(checkUrl("PUBLIC_BASE_URL", "not a url").ok, false);
+});
+
+test("checkRuntimeDependencies reports missing runtime packages", () => {
+  const check = checkRuntimeDependencies(
+    {
+      express: "^4.19.2",
+      cors: "^2.8.5",
+      dotenv: "^16.4.5",
+    },
+    {
+      resolvePackage: (name) => {
+        if (name === "cors") throw new Error("missing");
+        return `/node_modules/${name}/package.json`;
+      },
+    }
+  );
+
+  assert.equal(check.ok, false);
+  assert.deepEqual(check.missing, ["cors"]);
+  assert.match(check.message, /npm install/);
+});
+
+test("checkDependencyLockfile requires a committed npm lockfile for reproducible deploys", () => {
+  assert.deepEqual(
+    checkDependencyLockfile({
+      exists: (path) => path === "package-lock.json",
+    }),
+    {
+      name: "dependency-lockfile",
+      ok: true,
+      lockfile: "package-lock.json",
+      message: "依赖锁文件已存在：package-lock.json",
+    }
+  );
+  const missing = checkDependencyLockfile({ exists: () => false });
+  assert.equal(missing.ok, false);
+  assert.match(missing.message, /npm install --package-lock-only/);
 });
 
 test("buildJsonApiCheck marks HTML API responses as failed", () => {

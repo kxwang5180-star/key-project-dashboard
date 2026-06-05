@@ -15,6 +15,17 @@ export function normalizeGovernanceStatus(status) {
   return statusMap[value] || statusMap[value.toLowerCase()] || (["TODO", "DOING", "DONE"].includes(upperValue) ? upperValue : "TODO");
 }
 
+export function normalizeGovernanceLevel(level) {
+  const value = String(level || "").trim();
+  const upperValue = value.toUpperCase();
+  const levelMap = {
+    low: "LOW",
+    medium: "MEDIUM",
+    high: "HIGH",
+  };
+  return levelMap[value] || levelMap[value.toLowerCase()] || (["LOW", "MEDIUM", "HIGH"].includes(upperValue) ? upperValue : "MEDIUM");
+}
+
 export function buildGovernanceItemKey(item) {
   return [
     item.projectId || item.project?.id || "",

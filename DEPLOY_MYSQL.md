@@ -174,6 +174,14 @@ docker run -d \
   key-project-dashboard
 ```
 
+镜像构建会先安装完整依赖，执行 `npm run prisma:generate` 生成 Prisma Client，再裁剪开发依赖。构建前建议先执行：
+
+```bash
+npm run preflight -- --skip-http
+```
+
+如果预检提示缺少运行时依赖或关键环境变量，先修复这些问题再构建镜像。
+
 配套文件：  
 [Dockerfile](/Users/kk/Documents/Codex/2026-05-27/ai-ai-ai/Dockerfile)
 

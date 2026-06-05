@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildFocusedMilestonePatch,
   getMilestoneCalendarSource,
+  replaceFocusedMilestone,
   updateMetricDraftField,
   updateMilestoneDraftField,
 } from "../../src/ui/maintenance-drafts.js";
@@ -68,6 +69,45 @@ test("buildFocusedMilestonePatch maps focused editor date and status", () => {
       status: "in-progress",
     }
   );
+});
+
+test("replaceFocusedMilestone patches one milestone without mutating or clearing untouched dates", () => {
+  const milestones = [
+    { id: "ms1", title: "节点一", raw: "节点一", dateInfo: { key: "2026-06-01" }, status: "planned" },
+    { id: "ms2", title: "节点二", raw: "节点二", dateInfo: { key: "2026-06-15" }, status: "planned" },
+  ];
+
+  assert.deepEqual(
+    replaceFocusedMilestone(milestones, {
+      milestoneId: "ms1",
+      patch: {
+        title: "节点一更新",
+        raw: "节点一更新",
+        dateKey: "2026-06-08",
+        status: "in-progress",
+      },
+    }),
+    [
+      {
+        id: "ms1",
+        title: "节点一更新",
+        raw: "节点一更新",
+        dateInfo: { key: "2026-06-01" },
+        dateKey: "2026-06-08",
+        status: "in-progress",
+      },
+      {
+        id: "ms2",
+        title: "节点二",
+        raw: "节点二",
+        dateInfo: { key: "2026-06-15" },
+        dateKey: "2026-06-15",
+        status: "planned",
+      },
+    ]
+  );
+  assert.equal(milestones[0].title, "节点一");
+  assert.equal(milestones[1].dateKey, undefined);
 });
 
 test("getMilestoneCalendarSource uses active draft while maintaining the report project", () => {

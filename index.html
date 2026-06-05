@@ -223,6 +223,15 @@
                         <div class="milestone-focus-head">
                           <strong id="weekPrompt">尽快更新本周情况</strong>
                           <div class="milestone-focus-actions">
+                            <label class="milestone-status-picker">
+                              <span>状态</span>
+                              <select name="milestoneStatus">
+                                <option value="planned">计划中</option>
+                                <option value="in-progress">进行中</option>
+                                <option value="completed">已完成</option>
+                                <option value="changed">变更</option>
+                              </select>
+                            </label>
                             <button class="tiny-action" type="button" id="milestoneEditToggle">修改</button>
                             <button class="tiny-action" type="button" data-save-focused-milestone>保存里程碑</button>
                           </div>
@@ -236,15 +245,6 @@
                             <span>日期</span>
                             <input name="milestoneDate" type="date" />
                           </label>
-                          <label>
-                            <span>状态</span>
-                            <select name="milestoneStatus">
-                              <option value="planned">计划中</option>
-                              <option value="in-progress">进行中</option>
-                              <option value="completed">已完成</option>
-                              <option value="changed">变更</option>
-                            </select>
-                          </label>
                         </div>
                       </div>
                       <div class="week-snapshot" id="weekSnapshot"></div>
@@ -255,11 +255,6 @@
                         <span>本周进展</span>
                         <textarea name="progress" rows="5" required placeholder="建议结构：已完成 / 进行中 / 下周计划 / 需要协调"></textarea>
                       </label>
-                      <div class="quick-fill">
-                        <button type="button" data-template="progress">进展</button>
-                        <button type="button" data-template="riskfree">无风险</button>
-                        <button type="button" data-template="blocker">需协同</button>
-                      </div>
                     </section>
                     <section class="report-section">
                       <div class="step-mark">2</div>

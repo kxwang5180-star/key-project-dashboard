@@ -40,6 +40,16 @@ function parseMetricRecordDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function parseDateKey(value) {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map((part) => Number(part));
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+  return date;
+}
+
 function toFrontendMilestoneStatus(status) {
   const value = String(status || "").toUpperCase();
   const statusMap = {
@@ -109,6 +119,23 @@ export function buildProjectMetricCreateData(metric, { projectId, index = 0 }) {
     };
   }
 
+  return data;
+}
+
+export function buildProjectMilestoneCreateData(milestone, { projectId, index = 0 }) {
+  const milestoneId = String(milestone?.id || "").trim();
+  const dueDate = milestone?.dueDate ? parseDateKey(formatDateKey(milestone.dueDate)) : parseDateKey(milestone?.dateKey);
+  const data = {
+    projectId,
+    title: String(milestone?.title || `里程碑 ${index + 1}`).trim(),
+    source: String(milestone?.source || "项目维护").trim(),
+    rawText: String(milestone?.rawText || milestone?.raw || "").trim() || null,
+    dueDate,
+    status: normalizeProjectMilestoneStatus(milestone?.status),
+    sortOrder: index,
+    changeSummary: String(milestone?.changeSummary || milestone?.changeNote || "").trim() || null,
+  };
+  if (milestoneId) data.id = milestoneId;
   return data;
 }
 

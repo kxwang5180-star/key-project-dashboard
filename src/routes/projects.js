@@ -6,7 +6,8 @@ import { config } from "../config.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { canManageIdentity } from "../lib/auth.js";
 import { canUserMaintainProject, getAllowedProjectIdsForUser, syncProjectMembersFromFeishuChat } from "../services/project-members.js";
-import { buildProjectMetricCreateData, normalizeProjectMilestoneStatus, toPublicProjectBrief, toPublicProjectMaintenanceState } from "../services/project-records.js";
+import { resolveProjectChatSelection } from "../services/project-chat-records.js";
+import { buildProjectMetricCreateData, buildProjectMilestoneCreateData, toPublicProjectBrief, toPublicProjectMaintenanceState } from "../services/project-records.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import { buildProjectChatAuditDetail } from "../services/audit-log-records.js";
 
@@ -40,13 +41,18 @@ projectRouter.put("/:id/chat", requireRoles("ADMIN"), asyncRoute(async (req, res
     return res.status(403).json({ message: "只有身份管理员可以绑定项目群聊" });
   }
   const chatId = String(req.body?.chatId || "").trim();
-  if (!chatId) return res.status(400).json({ message: "chat_id 必填" });
+  if (!chatId) return res.status(400).json({ message: "请先配置项目群 chat_id" });
+  const projectRecord = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, feishuChatId: true },
+  });
   const chat = await prisma.feishuChat.findUnique({ where: { chatId } });
-  if (!chat) return res.status(400).json({ message: "该群聊尚未同步，请先同步我的飞书群聊后再选择" });
+  const selection = resolveProjectChatSelection({ project: projectRecord, requestedChatId: chatId, chat });
+  if (!selection.ok) return res.status(selection.status).json({ message: selection.message });
 
   const project = await prisma.project.update({
     where: { id: req.params.id },
-    data: { feishuChatId: chatId },
+    data: { feishuChatId: selection.chatId },
     select: {
       id: true,
       shortName: true,
@@ -58,7 +64,7 @@ projectRouter.put("/:id/chat", requireRoles("ADMIN"), asyncRoute(async (req, res
     action: "project.chat.bind",
     targetType: "Project",
     targetId: req.params.id,
-    detail: buildProjectChatAuditDetail({ chatId }),
+    detail: buildProjectChatAuditDetail({ chatId: selection.chatId }),
   });
   res.json({ project });
 }));
@@ -73,10 +79,12 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
   });
   if (!project) return res.status(404).json({ message: "项目不存在" });
 
-  const chatId = String(req.body?.chatId || project.feishuChatId || "").trim();
-  if (!chatId) return res.status(400).json({ message: "请先配置项目群 chat_id" });
+  const requestedChatId = String(req.body?.chatId || project.feishuChatId || "").trim();
+  const chat = requestedChatId ? await prisma.feishuChat.findUnique({ where: { chatId: requestedChatId } }) : null;
+  const selection = resolveProjectChatSelection({ project, requestedChatId, chat });
+  if (!selection.ok) return res.status(selection.status).json({ message: selection.message });
 
-  const members = await syncProjectMembersFromFeishuChat(req.params.id, chatId, {
+  const members = await syncProjectMembersFromFeishuChat(req.params.id, selection.chatId, {
     userId: req.user.id,
   });
   await writeAuditLog({
@@ -84,11 +92,11 @@ projectRouter.post("/:id/chat/sync", requireRoles("ADMIN"), asyncRoute(async (re
     action: "project.chat.members.sync",
     targetType: "Project",
     targetId: req.params.id,
-    detail: buildProjectChatAuditDetail({ chatId, memberCount: members.length }),
+    detail: buildProjectChatAuditDetail({ chatId: selection.chatId, memberCount: members.length }),
   });
   res.json({
     ok: true,
-    chatId,
+    chatId: selection.chatId,
     members: members.map((member) => ({
       memberId: member.memberId,
       name: member.name,
@@ -173,16 +181,7 @@ projectRouter.put("/:id/milestones", asyncRoute(async (req, res) => {
     await tx.milestone.deleteMany({ where: { projectId: req.params.id } });
     if (milestones.length) {
       await tx.milestone.createMany({
-        data: milestones.map((milestone, index) => ({
-          projectId: req.params.id,
-          title: String(milestone.title || `里程碑 ${index + 1}`).trim(),
-          source: String(milestone.source || "项目维护").trim(),
-          rawText: String(milestone.rawText || milestone.raw || "").trim() || null,
-          dueDate: milestone.dueDate ? new Date(milestone.dueDate) : milestone.dateKey ? new Date(`${milestone.dateKey}T00:00:00.000Z`) : null,
-          status: normalizeProjectMilestoneStatus(milestone.status),
-          sortOrder: index,
-          changeSummary: String(milestone.changeSummary || milestone.changeNote || "").trim() || null,
-        })),
+        data: milestones.map((milestone, index) => buildProjectMilestoneCreateData(milestone, { projectId: req.params.id, index })),
       });
     }
     await writeAuditLog({

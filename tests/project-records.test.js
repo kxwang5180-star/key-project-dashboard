@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyProjectBriefSnapshot,
+  buildProjectMilestoneCreateData,
   buildProjectMetricCreateData,
   buildProjectBriefUpdatePayload,
   normalizeProjectMilestoneStatus,
@@ -160,6 +161,46 @@ test("buildProjectMetricCreateData preserves client metric ids and history recor
       },
     }
   );
+});
+
+test("buildProjectMilestoneCreateData ignores invalid date keys instead of creating invalid dates", () => {
+  assert.deepEqual(
+    buildProjectMilestoneCreateData(
+      {
+        id: "milestone_1",
+        title: "完成联调",
+        raw: "完成联调",
+        source: "项目维护",
+        dateKey: "bad-date",
+        status: "in-progress",
+        changeNote: "日期待确认",
+      },
+      { projectId: "project_1", index: 1 }
+    ),
+    {
+      id: "milestone_1",
+      projectId: "project_1",
+      title: "完成联调",
+      source: "项目维护",
+      rawText: "完成联调",
+      dueDate: null,
+      status: "IN_PROGRESS",
+      sortOrder: 1,
+      changeSummary: "日期待确认",
+    }
+  );
+});
+
+test("buildProjectMilestoneCreateData rejects impossible calendar dates", () => {
+  const data = buildProjectMilestoneCreateData(
+    {
+      title: "完成联调",
+      dateKey: "2026-02-31",
+    },
+    { projectId: "project_1", index: 0 }
+  );
+
+  assert.equal(data.dueDate, null);
 });
 
 test("normalizeProjectMilestoneStatus accepts frontend milestone status keys", () => {

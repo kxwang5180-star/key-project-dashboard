@@ -28,6 +28,14 @@ export function buildFocusedMilestonePatch(formValues, fallback = {}) {
   };
 }
 
+export function replaceFocusedMilestone(milestones, { milestoneId, patch }) {
+  return (Array.isArray(milestones) ? milestones : []).map((milestone) => {
+    const dateKey = String(milestone.dateKey || milestone.dateInfo?.key || "").trim();
+    const base = dateKey ? { ...milestone, dateKey } : { ...milestone };
+    return milestone.id === milestoneId ? { ...base, ...patch } : base;
+  });
+}
+
 export function getMilestoneCalendarSource({
   projectId,
   reportProjectId,

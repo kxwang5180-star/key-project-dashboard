@@ -6,7 +6,10 @@ import { canUserMaintainProject, getAllowedProjectIdsForUser } from "../services
 import {
   buildMilestoneUpdateFromReport,
   buildRiskFromReport,
+  hasMeaningfulReportProgress,
   normalizeMilestoneState,
+  normalizeReportWeekNumber,
+  parseReportMilestoneDate,
   toPublicProjectReportState,
   toPublicWeeklyReport,
 } from "../services/report-records.js";
@@ -47,7 +50,8 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
     milestoneState = null,
   } = req.body || {};
 
-  if (!projectId || !weekNumber || !progress) {
+  const normalizedWeekNumber = normalizeReportWeekNumber(weekNumber);
+  if (!projectId || !normalizedWeekNumber || !hasMeaningfulReportProgress(progress)) {
     return res.status(400).json({ message: "项目、周次、进展必填" });
   }
 
@@ -98,11 +102,11 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
         projectId,
         milestoneId: existingMilestone?.id || null,
         authorId: req.user.id,
-        weekNumber: Number(weekNumber),
+        weekNumber: normalizedWeekNumber,
         progress: String(progress).trim(),
         riskSummary: riskSummary ? String(riskSummary).trim() : null,
         milestoneTitle: milestoneTitle ? String(milestoneTitle).trim() : null,
-        milestoneDate: milestoneDate ? new Date(milestoneDate) : null,
+        milestoneDate: parseReportMilestoneDate(milestoneDate),
         milestoneState: normalizeMilestoneState(milestoneState),
       },
       include: {

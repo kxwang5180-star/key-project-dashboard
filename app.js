@@ -9,9 +9,15 @@ import {
 import {
   buildFocusedMilestonePatch,
   getMilestoneCalendarSource,
+  replaceFocusedMilestone,
   updateMetricDraftField,
   updateMilestoneDraftField,
 } from "./src/ui/maintenance-drafts.js";
+import {
+  getMilestoneReportPreview,
+  getVisibleCalendarEvents,
+  getWeekRangeSummary,
+} from "./src/ui/report-experience.js";
 import { mergeBootstrapProjects } from "./src/ui/project-bootstrap.js";
 import { buildProjectUserGroups } from "./src/ui/identity-groups.js";
 
@@ -40,6 +46,9 @@ const state = {
   risksExpanded: false,
   selectedMilestone: null,
   saveNotice: "",
+  reportSubmitting: false,
+  expandedCalendarDays: {},
+  expandedMilestoneReports: {},
   governanceLevel: "all",
   governanceType: "all",
   chatPickerOpen: false,
@@ -436,8 +445,8 @@ async function syncProjectChatMembers(projectId, chatId) {
   });
 }
 
-async function saveProjectMetrics(project) {
-  const metrics = getProjectMetricItems(project).map((metric) => ({
+async function saveProjectMetrics(project, metricSource = getProjectMetricItems(project)) {
+  const metrics = metricSource.map((metric) => ({
     id: metric.id,
     name: metric.name,
     currentValue: metric.current,
@@ -1592,8 +1601,13 @@ function renderCalendar() {
   for (let i = 0; i < mondayBasedOffset; i += 1) cells.push('<div class="calendar-day is-muted"></div>');
 
   for (let day = 1; day <= daysInMonth; day += 1) {
+    const dayKey = formatDateKey(state.calendarYear, state.calendarMonth, day);
     const dayEvents = milestones.filter((milestone) => milestone.dateInfo.day === day);
-    const eventMarkup = dayEvents
+    const dayState = getVisibleCalendarEvents(dayEvents, {
+      expanded: Boolean(state.expandedCalendarDays[dayKey]),
+      limit: 3,
+    });
+    const eventMarkup = dayState.visible
       .map(
         (milestone) => `
           <button class="calendar-event has-tip" data-project="${milestone.projectId}" data-milestone="${
@@ -1609,11 +1623,19 @@ function renderCalendar() {
         `
       )
       .join("");
+    const moreMarkup = dayState.hiddenCount
+      ? `<button class="calendar-more" type="button" data-calendar-day="${dayKey}">还有 ${dayState.hiddenCount} 个</button>`
+      : dayState.isExpanded && dayEvents.length > 3
+        ? `<button class="calendar-more" type="button" data-calendar-day="${dayKey}">收起</button>`
+        : "";
 
     cells.push(`
-      <div class="calendar-day">
+      <div class="calendar-day ${dayState.isExpanded ? "is-expanded" : ""}">
         <div class="calendar-date">${day}</div>
-        ${eventMarkup}
+        <div class="calendar-day-events">
+          ${eventMarkup}
+        </div>
+        ${moreMarkup}
       </div>
     `);
   }
@@ -1707,6 +1729,8 @@ function getMilestoneWindow(project, milestone) {
   return {
     start,
     end,
+    startKey: formatDateKey(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+    endKey: formatDateKey(end.getFullYear(), end.getMonth() + 1, end.getDate()),
     weekCount,
     currentWeek,
     hasStarted,
@@ -2589,9 +2613,7 @@ function renderReportProjectMetrics() {
 
   container.innerHTML = `
     <div class="metric-workbench-head">
-      <div>
-        <strong>${metrics.length} 个指标</strong>
-      </div>
+      <strong>${metrics.length} 个指标</strong>
       <button class="tiny-action" type="button" id="metricEditToggle">${state.metricEditMode ? "收起维护" : "维护指标"}</button>
     </div>
     <div class="metric-visual-grid">
@@ -2615,7 +2637,7 @@ function renderReportMilestoneRail() {
   const project = getReportProject();
   if (!container || !project) return;
   const toggle = document.querySelector("#milestoneManageToggle");
-  if (toggle) toggle.textContent = state.milestoneManageMode ? "完成" : "维护";
+  if (toggle) toggle.textContent = state.milestoneManageMode ? "取消" : "维护";
   const addButton = document.querySelector(".milestone-add-button");
   if (addButton) addButton.classList.toggle("is-visible", state.milestoneManageMode);
   const saveButton = document.querySelector(".milestone-save-button");
@@ -2719,7 +2741,12 @@ function renderWeekTimeline() {
   if (state.selectedWeek < 1) state.selectedWeek = windowInfo.currentWeek || 1;
   const selectedReport = getWeekSubmission(project.id, state.selectedWeek, milestone.id);
   const currentReport = getWeekSubmission(project.id, windowInfo.currentWeek, milestone.id);
-  if (rangeLabel) rangeLabel.textContent = `${windowInfo.label} · ${windowInfo.weekCount}周`;
+  const weekSummary = getWeekRangeSummary({
+    startKey: windowInfo.startKey,
+    endKey: windowInfo.endKey,
+    selectedWeek: state.selectedWeek,
+  });
+  if (rangeLabel) rangeLabel.textContent = `${weekSummary} · 节点周期 ${windowInfo.label}`;
   prompt.textContent = selectedReport
     ? `${milestone.title}`
     : state.selectedWeek === windowInfo.currentWeek && windowInfo.hasStarted
@@ -2749,7 +2776,7 @@ function renderWeekTimeline() {
   if (selectedReport) {
     snapshot.innerHTML = `
       <div>
-        <strong>${escapeHtml(windowInfo.label)} · 第${state.selectedWeek}周记录</strong>
+        <strong>${escapeHtml(weekSummary)} · 记录</strong>
         <p>${escapeHtml(compactText(selectedReport.progress, 96))}</p>
       </div>
       <div class="week-checks">
@@ -2763,7 +2790,7 @@ function renderWeekTimeline() {
 
   snapshot.innerHTML = `
     <div>
-      <strong>${escapeHtml(windowInfo.label)} · 第${state.selectedWeek}周待维护</strong>
+      <strong>${escapeHtml(weekSummary)} · 待维护</strong>
       <p>当前周进展会沉淀到这个里程碑下，点击左侧周节点可回看历史记录。</p>
     </div>
     <div class="week-checks">
@@ -2820,7 +2847,14 @@ function renderMemberWorkspace() {
 
 function openMilestoneModal(projectId, milestoneId) {
   const project = projects.find((item) => item.id === projectId);
-  const milestone = project?.milestones.find((item) => item.id === milestoneId);
+  const reportProject = getReportProject();
+  const milestone = getMilestoneCalendarSource({
+    projectId,
+    reportProjectId: reportProject?.id,
+    isManagingMilestones: state.milestoneManageMode,
+    projectMilestones: project?.milestones,
+    draftMilestones: draftStore.milestones[projectId],
+  }).find((item) => item.id === milestoneId);
   if (!project || !milestone) return;
 
   state.selectedId = projectId;
@@ -2829,16 +2863,52 @@ function openMilestoneModal(projectId, milestoneId) {
   renderDetail();
   renderMetrics();
 
+  const reportKey = `${projectId}:${milestoneId}`;
+  const reportPreview = getMilestoneReportPreview(submissions, {
+    projectId,
+    milestoneId,
+    expanded: Boolean(state.expandedMilestoneReports[reportKey]),
+    limit: 3,
+  });
+  const reportMarkup = reportPreview.reports.length
+    ? reportPreview.reports
+        .map(
+          (report) => `
+            <article class="modal-report-item">
+              <header>
+                <strong>第${escapeHtml(report.week || CURRENT_REPORT_WEEK)}周</strong>
+                <span>${escapeHtml(report.memberName || "未记录成员")}</span>
+              </header>
+              <p>${escapeHtml(compactText(report.progress || "暂无进展内容", reportPreview.isExpanded ? 220 : 96))}</p>
+              ${report.risk ? `<small>风险与诉求：${escapeHtml(compactText(report.risk, reportPreview.isExpanded ? 160 : 72))}</small>` : ""}
+            </article>
+          `
+        )
+        .join("")
+    : '<p class="muted-text">该里程碑暂无周度维护记录</p>';
+  const rawText = String(milestone.raw || "").trim();
+  const rawMarkup = rawText && rawText !== milestone.title ? `<p>${escapeHtml(rawText)}</p>` : "";
   document.querySelector("#milestoneModalContent").innerHTML = `
-    <p class="modal-eyebrow">${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(milestone.source)}</p>
-    <h2 id="milestoneModalTitle">${escapeHtml(project.shortName)}</h2>
+    <p class="modal-eyebrow">${escapeHtml(project.shortName)} · ${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(milestone.source)}</p>
+    <h2 id="milestoneModalTitle">${escapeHtml(milestone.title)}</h2>
     <div class="modal-status-line">
       <span class="calendar-status ${milestone.status}">${milestoneStatusMap[milestone.status]}</span>
       <span>${escapeHtml(milestone.dateInfo?.label || "未标日期")}</span>
     </div>
-    <h3>${escapeHtml(milestone.title)}</h3>
-    <p>${escapeHtml(milestone.raw)}</p>
+    ${rawMarkup}
     ${milestone.changeNote ? `<p><strong>变更原因：</strong>${escapeHtml(milestone.changeNote)}</p>` : ""}
+    <section class="modal-report-list">
+      <div class="modal-section-head">
+        <strong>周度维护</strong>
+        <span>${reportPreview.total} 条</span>
+      </div>
+      ${reportMarkup}
+      ${
+        reportPreview.hiddenCount || reportPreview.isExpanded
+          ? `<button class="tiny-action" type="button" data-toggle-modal-reports="${escapeHtml(reportKey)}">${reportPreview.isExpanded ? "收起" : `展开 ${reportPreview.hiddenCount} 条`}</button>`
+          : ""
+      }
+    </section>
   `;
   const modal = document.querySelector("#milestoneModal");
   modal.classList.add("is-open");
@@ -3360,6 +3430,14 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const calendarDayButton = event.target.closest("[data-calendar-day]");
+  if (calendarDayButton) {
+    const dayKey = calendarDayButton.dataset.calendarDay;
+    state.expandedCalendarDays[dayKey] = !state.expandedCalendarDays[dayKey];
+    renderCalendar();
+    return;
+  }
+
   const calendarProjectButton = event.target.closest("[data-calendar-project]");
   if (calendarProjectButton) {
     state.calendarProject = calendarProjectButton.dataset.calendarProject;
@@ -3461,13 +3539,15 @@ document.addEventListener("click", async (event) => {
   const saveMetricsButton = event.target.closest("[data-save-metrics]");
   if (saveMetricsButton) {
     const project = getReportProject();
-    commitMetricDraft(project);
-    state.metricEditMode = false;
+    const metricDraft = ensureMetricDraft(project);
     state.saveNotice = "正在保存项目指标...";
-    renderMemberWorkspace();
-    saveProjectMetrics(project)
+    renderReportStatusPanel();
+    saveProjectMetrics(project, metricDraft)
       .then((payload) => {
-        applyProjectReportState(payload?.projectState);
+        if (payload?.projectState) applyProjectReportState(payload.projectState);
+        else setProjectMetricItems(project, metricDraft);
+        resetMetricDraft(project.id);
+        state.metricEditMode = false;
         state.saveNotice = "项目指标已保存。";
       })
       .catch((error) => {
@@ -3545,22 +3625,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const templateButton = event.target.closest("[data-template]");
-  if (templateButton) {
-    const form = document.querySelector("#memberReportForm");
-    if (templateButton.dataset.template === "progress") {
-      form.elements.progress.value = `第${state.selectedWeek}周更新\n已完成：\n进行中：\n下周计划：\n需要协调：`;
-    }
-    if (templateButton.dataset.template === "riskfree") {
-      form.elements.risk.value = "暂无";
-    }
-    if (templateButton.dataset.template === "blocker") {
-      form.elements.progress.value = `第${state.selectedWeek}周更新\n已完成：\n阻塞点：\n需要协调：\n预计恢复时间：`;
-      form.elements.risk.value = "存在待协调事项：";
-    }
-    return;
-  }
-
   const milestoneEditToggle = event.target.closest("#milestoneEditToggle");
   if (milestoneEditToggle) {
     state.milestoneEditMode = !state.milestoneEditMode;
@@ -3578,38 +3642,37 @@ document.addEventListener("click", async (event) => {
     const nextTitle = String(form.elements.milestoneTitle.value || milestone.title).trim();
     const nextDate = String(form.elements.milestoneDate.value || milestone.dateInfo?.key || "").trim();
     const nextStatus = editableMilestoneStatusMap[form.elements.milestoneStatus.value] ? form.elements.milestoneStatus.value : "planned";
-    const milestones = getReportMilestones(project).map((item) => {
-      if (item.id !== milestone.id) return item;
-      return normalizeMilestone(project, {
-        ...serializeMilestone(item),
-        title: nextTitle,
-        raw: nextTitle,
-        dateKey: nextDate,
-        status: nextStatus,
-      });
-    });
-    setProjectMilestones(project, milestones);
-    state.milestoneEditMode = false;
+    const milestones = replaceFocusedMilestone(getReportMilestones(project), {
+      milestoneId: milestone.id,
+      patch: buildFocusedMilestonePatch(
+        {
+          title: nextTitle,
+          dateKey: nextDate,
+          status: nextStatus,
+        },
+        serializeMilestone(milestone)
+      ),
+    }).map((item, index) => normalizeMilestone(project, item, index));
     state.saveNotice = "正在保存项目里程碑...";
-    renderMemberWorkspace();
-    saveProjectMilestones(project)
-      .then((payload) => {
-        applyProjectReportState(payload?.projectState);
-        state.saveNotice = "项目里程碑已保存。";
-      })
-      .catch((error) => {
-        state.saveNotice = error.message;
-      })
-      .finally(() => {
-        syncReportMilestoneFields();
-        renderReportMilestoneRail();
-        renderWeekTimeline();
-        renderReportProjectBrief();
-        renderCalendar();
-        renderDetail();
-        renderReportStatusPanel();
-        renderSummary();
-      });
+    renderReportStatusPanel();
+    try {
+      const payload = await saveProjectMilestones(project, milestones);
+      if (payload?.projectState) applyProjectReportState(payload.projectState);
+      else setProjectMilestones(project, milestones);
+      state.milestoneEditMode = false;
+      state.saveNotice = "项目里程碑已保存。";
+      syncReportMilestoneFields();
+      renderReportMilestoneRail();
+      renderWeekTimeline();
+      renderReportProjectBrief();
+      renderCalendar();
+      renderDetail();
+      renderReportStatusPanel();
+      renderSummary();
+    } catch (error) {
+      state.saveNotice = error.message;
+      renderReportStatusPanel();
+    }
     return;
   }
 
@@ -3653,6 +3716,15 @@ document.addEventListener("click", async (event) => {
   const milestoneButton = event.target.closest("[data-milestone]");
   if (milestoneButton) {
     openMilestoneModal(milestoneButton.dataset.project, milestoneButton.dataset.milestone);
+    return;
+  }
+
+  const modalReportsButton = event.target.closest("[data-toggle-modal-reports]");
+  if (modalReportsButton) {
+    const [projectId, milestoneId] = modalReportsButton.dataset.toggleModalReports.split(":");
+    state.expandedMilestoneReports[modalReportsButton.dataset.toggleModalReports] =
+      !state.expandedMilestoneReports[modalReportsButton.dataset.toggleModalReports];
+    openMilestoneModal(projectId, milestoneId);
     return;
   }
 
@@ -3819,6 +3891,7 @@ memberReportForm.addEventListener("input", (event) => {
 
 memberReportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (state.reportSubmitting) return;
   if (!memberProfile) {
     state.currentView = "register";
     window.location.hash = "register";
@@ -3863,6 +3936,12 @@ memberReportForm.addEventListener("submit", async (event) => {
   const reportMilestone = getReportMilestone(reportProject);
   if (reportMilestone) report.milestoneId = reportMilestone.id;
 
+  state.reportSubmitting = true;
+  const submitButton = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "保存中...";
+  }
   try {
     const payload = await saveWeeklyReport(report);
     const savedReport = payload?.report;
@@ -3871,6 +3950,8 @@ memberReportForm.addEventListener("submit", async (event) => {
     await loadWeeklyReports();
     state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，已同步到服务端`;
     event.currentTarget.reset();
+    event.currentTarget.elements.progress.value = "";
+    event.currentTarget.elements.risk.value = "";
     document.querySelector("#reportProjectSelect").value = report.projectId;
     renderMemberWorkspace();
     renderDetail();
@@ -3880,6 +3961,13 @@ memberReportForm.addEventListener("submit", async (event) => {
   } catch (error) {
     state.saveNotice = error.message || "周报保存失败，请稍后重试";
     renderMemberWorkspace();
+  } finally {
+    state.reportSubmitting = false;
+    const activeSubmitButton = event.currentTarget.querySelector('button[type="submit"]');
+    if (activeSubmitButton) {
+      activeSubmitButton.disabled = false;
+      activeSubmitButton.textContent = "保存本周更新";
+    }
   }
 });
 }

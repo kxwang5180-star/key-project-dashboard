@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import {
   DEFAULT_API_PATHS,
+  checkRuntimeDependencies,
   checkRequiredEnv,
   checkUrl,
   buildJsonApiCheck,
   summarizeChecks,
 } from "../src/lib/preflight-checks.js";
+
+const require = createRequire(import.meta.url);
 
 function loadDotEnv(path = ".env") {
   if (!existsSync(path)) return;
@@ -71,7 +75,11 @@ function printCheck(check) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
   const checks = [
+    checkRuntimeDependencies(packageJson.dependencies || {}, {
+      resolvePackage: (name) => require.resolve(`${name}/package.json`),
+    }),
     checkRequiredEnv(process.env),
     checkUrl("PREFLIGHT_BASE_URL", args.baseUrl),
     checkUrl("FEISHU_REDIRECT_URI", process.env.FEISHU_REDIRECT_URI),

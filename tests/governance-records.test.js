@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildGovernanceItemKey,
+  normalizeGovernanceLevel,
   normalizeGovernanceStatus,
   toClientGovernanceResolution,
 } from "../src/services/governance-records.js";
@@ -12,6 +13,14 @@ test("normalizeGovernanceStatus accepts frontend governance statuses", () => {
   assert.equal(normalizeGovernanceStatus("done"), "DONE");
   assert.equal(normalizeGovernanceStatus("DONE"), "DONE");
   assert.equal(normalizeGovernanceStatus("unknown"), "TODO");
+});
+
+test("normalizeGovernanceLevel accepts frontend governance levels", () => {
+  assert.equal(normalizeGovernanceLevel("low"), "LOW");
+  assert.equal(normalizeGovernanceLevel("medium"), "MEDIUM");
+  assert.equal(normalizeGovernanceLevel("high"), "HIGH");
+  assert.equal(normalizeGovernanceLevel("HIGH"), "HIGH");
+  assert.equal(normalizeGovernanceLevel("unknown"), "MEDIUM");
 });
 
 test("buildGovernanceItemKey matches generated items and persisted tasks", () => {

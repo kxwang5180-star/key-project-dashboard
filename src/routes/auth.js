@@ -15,6 +15,7 @@ import {
 } from "../lib/feishu.js";
 import { ensureUserProjectMembershipLinks, getAllowedProjectIdsForUser } from "../services/project-members.js";
 import { buildFeishuTokenData, syncMyFeishuChatsAndMembers } from "../services/feishu-chat-sync.js";
+import { resolveIdentityUserRegistration, resolveIdentityUserUpdate } from "../services/identity-user-records.js";
 import { toPublicUser } from "../services/public-user.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import { buildUserRoleAuditDetail } from "../services/audit-log-records.js";
@@ -41,6 +42,18 @@ authRouter.post("/register", asyncRoute(async (req, res) => {
   const normalizedEmail = String(email).trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return res.status(409).json({ message: "该邮箱已注册" });
+  const normalizedProjectId = String(defaultProjectId || "").trim();
+  const defaultProject = normalizedProjectId
+    ? await prisma.project.findUnique({
+        where: { id: normalizedProjectId },
+        select: { id: true },
+      })
+    : null;
+  const registration = resolveIdentityUserRegistration({
+    defaultProjectId,
+    project: defaultProject,
+  });
+  if (!registration.ok) return res.status(registration.status).json({ message: registration.message });
 
   const user = await prisma.user.create({
     data: {
@@ -48,7 +61,7 @@ authRouter.post("/register", asyncRoute(async (req, res) => {
       email: normalizedEmail,
       passwordHash: await hashPassword(String(password)),
       role: "MEMBER",
-      defaultProjectId,
+      defaultProjectId: registration.defaultProjectId,
     },
     select: {
       id: true,
@@ -279,12 +292,29 @@ authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), asyncRoute(asy
     return res.status(403).json({ message: "只有身份管理员可以维护人员角色" });
   }
   const { role, defaultProjectId = null } = req.body || {};
-  const nextRole = role === "ADMIN" ? "ADMIN" : "MEMBER";
+  const targetUser = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+  const normalizedProjectId = String(defaultProjectId || "").trim();
+  const defaultProject = normalizedProjectId
+    ? await prisma.project.findUnique({
+        where: { id: normalizedProjectId },
+        select: { id: true },
+      })
+    : null;
+  const update = resolveIdentityUserUpdate({
+    user: targetUser,
+    role,
+    defaultProjectId,
+    project: defaultProject,
+  });
+  if (!update.ok) return res.status(update.status).json({ message: update.message });
   const user = await prisma.user.update({
     where: { id: req.params.id },
     data: {
-      role: nextRole,
-      defaultProjectId: defaultProjectId || null,
+      role: update.role,
+      defaultProjectId: update.defaultProjectId,
     },
     select: {
       id: true,
@@ -303,7 +333,7 @@ authRouter.put("/users/:id", authenticate, requireRoles("ADMIN"), asyncRoute(asy
     action: "identity.user.update",
     targetType: "User",
     targetId: req.params.id,
-    detail: buildUserRoleAuditDetail({ role: nextRole, defaultProjectId }),
+    detail: buildUserRoleAuditDetail({ role: update.role, defaultProjectId: update.defaultProjectId }),
   });
   res.json({
     user: toPublicUser(user, await getAllowedProjectIdsForUser(user), { canManageIdentity }),

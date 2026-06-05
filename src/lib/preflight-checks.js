@@ -50,6 +50,27 @@ export function checkUrl(name, value, options = {}) {
   }
 }
 
+export function checkRuntimeDependencies(dependencies = {}, options = {}) {
+  const resolvePackage = options.resolvePackage || (() => "");
+  const names = Object.keys(dependencies);
+  const missing = [];
+  for (const name of names) {
+    try {
+      resolvePackage(name);
+    } catch {
+      missing.push(name);
+    }
+  }
+  return {
+    name: "runtime-dependencies",
+    ok: missing.length === 0,
+    missing,
+    message: missing.length
+      ? `缺少运行时依赖：${missing.join(", ")}。请先执行 npm install`
+      : "运行时依赖可解析",
+  };
+}
+
 export function buildJsonApiCheck(path, response) {
   const contentType = String(response.contentType || "").toLowerCase();
   const isJson = contentType.includes("application/json");

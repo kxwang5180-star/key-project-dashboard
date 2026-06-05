@@ -4,7 +4,10 @@ import {
   buildMilestoneUpdateFromReport,
   toPublicProjectReportState,
   buildRiskFromReport,
+  hasMeaningfulReportProgress,
   normalizeMilestoneState,
+  parseReportMilestoneDate,
+  normalizeReportWeekNumber,
   toPublicWeeklyReport,
 } from "../src/services/report-records.js";
 
@@ -49,6 +52,28 @@ test("normalizeMilestoneState accepts frontend status keys", () => {
   assert.equal(normalizeMilestoneState("unknown"), null);
 });
 
+test("parseReportMilestoneDate returns null for invalid date keys", () => {
+  assert.equal(parseReportMilestoneDate("bad-date"), null);
+  assert.equal(parseReportMilestoneDate("2026-02-31"), null);
+  assert.equal(parseReportMilestoneDate(""), null);
+  assert.equal(parseReportMilestoneDate("2026-06-08").toISOString(), "2026-06-08T00:00:00.000Z");
+});
+
+test("normalizeReportWeekNumber accepts only whole weeks in an operating range", () => {
+  assert.equal(normalizeReportWeekNumber("6"), 6);
+  assert.equal(normalizeReportWeekNumber(12), 12);
+  assert.equal(normalizeReportWeekNumber("0"), null);
+  assert.equal(normalizeReportWeekNumber("3.5"), null);
+  assert.equal(normalizeReportWeekNumber("bad"), null);
+  assert.equal(normalizeReportWeekNumber(99), null);
+});
+
+test("hasMeaningfulReportProgress rejects template-only progress text", () => {
+  assert.equal(hasMeaningfulReportProgress("第6周更新\n已完成：\n进行中：\n下周计划：\n需要协调："), false);
+  assert.equal(hasMeaningfulReportProgress("   "), false);
+  assert.equal(hasMeaningfulReportProgress("本周完成联调并进入试运行。"), true);
+});
+
 test("buildRiskFromReport creates a risk only for meaningful risk text", () => {
   assert.equal(buildRiskFromReport({ projectId: "p1", riskSummary: "暂无", ownerName: "王康旭" }), null);
   assert.equal(buildRiskFromReport({ projectId: "p1", riskSummary: "  ", ownerName: "王康旭" }), null);
@@ -85,6 +110,25 @@ test("buildMilestoneUpdateFromReport records milestone changes from weekly repor
   assert.equal(update.status, "CHANGED");
   assert.match(update.changeSummary, /名称由「试点上线」调整为「试点扩大上线」/);
   assert.match(update.changeSummary, /日期由2026-06-01调整为2026-06-08/);
+});
+
+test("buildMilestoneUpdateFromReport ignores invalid report milestone dates", () => {
+  assert.equal(
+    buildMilestoneUpdateFromReport(
+      {
+        title: "试点上线",
+        dueDate: new Date("2026-06-01T00:00:00.000Z"),
+        status: "PLANNED",
+        changeSummary: "",
+      },
+      {
+        milestoneTitle: "试点上线",
+        milestoneDate: "bad-date",
+        milestoneState: "planned",
+      }
+    ),
+    null
+  );
 });
 
 test("buildMilestoneUpdateFromReport returns null when report has no milestone changes", () => {

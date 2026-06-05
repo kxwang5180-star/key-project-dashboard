@@ -1,10 +1,9 @@
-import { GovernanceLevel, GovernanceStatus } from "@prisma/client";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
 import { authenticate, requireRoles } from "../middleware/authenticate.js";
 import { getAllowedProjectIdsForUser } from "../services/project-members.js";
-import { normalizeGovernanceStatus } from "../services/governance-records.js";
+import { normalizeGovernanceLevel, normalizeGovernanceStatus } from "../services/governance-records.js";
 import { writeAuditLog } from "../services/audit-log.js";
 import { buildGovernanceAuditDetail } from "../services/audit-log-records.js";
 
@@ -22,17 +21,22 @@ governanceRouter.get("/", asyncRoute(async (req, res) => {
 }));
 
 governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
-  const { projectId, taskType, title, detail, level = GovernanceLevel.MEDIUM, status = GovernanceStatus.TODO, ownerName = null } = req.body || {};
+  const { projectId, taskType, title, detail, level = "MEDIUM", status = "TODO", ownerName = null } = req.body || {};
   if (!projectId || !taskType || !title || !detail) {
     return res.status(400).json({ message: "项目、类型、标题、详情必填" });
   }
+  const project = await prisma.project.findUnique({
+    where: { id: String(projectId).trim() },
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ message: "项目不存在，不能创建治理任务" });
   const task = await prisma.governanceTask.create({
     data: {
-      projectId,
+      projectId: project.id,
       taskType: String(taskType).trim(),
       title: String(title).trim(),
       detail: String(detail).trim(),
-      level,
+      level: normalizeGovernanceLevel(level),
       status: normalizeGovernanceStatus(status),
       ownerName: ownerName ? String(ownerName).trim() : null,
     },
@@ -49,6 +53,11 @@ governanceRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) =>
 
 governanceRouter.put("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   const { status, ownerName } = req.body || {};
+  const existingTask = await prisma.governanceTask.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+  if (!existingTask) return res.status(404).json({ message: "治理任务不存在" });
   const task = await prisma.governanceTask.update({
     where: { id: req.params.id },
     data: {
