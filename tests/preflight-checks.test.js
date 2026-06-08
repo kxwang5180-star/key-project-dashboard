@@ -2,14 +2,28 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildJsonApiCheck,
+  DEFAULT_API_PATHS,
   checkFeishuRedirectUri,
   checkFeishuScopes,
+  checkFeishuAccessPolicy,
   checkDependencyLockfile,
   checkRuntimeDependencies,
   checkRequiredEnv,
   checkUrl,
   summarizeChecks,
 } from "../src/lib/preflight-checks.js";
+
+test("DEFAULT_API_PATHS covers frontend data connectivity sources", () => {
+  assert.deepEqual(DEFAULT_API_PATHS, [
+    "/api",
+    "/api/health",
+    "/api/auth/me",
+    "/api/bootstrap",
+    "/api/projects",
+    "/api/reports",
+    "/api/governance",
+  ]);
+});
 
 test("checkRequiredEnv reports missing required values without leaking secrets", () => {
   const check = checkRequiredEnv(
@@ -45,6 +59,27 @@ test("checkFeishuScopes requires login and chat sync permissions", () => {
   assert.equal(check.ok, false);
   assert.deepEqual(check.missing, ["im:chat.members:read"]);
   assert.match(check.message, /缺少飞书权限/);
+});
+
+test("checkFeishuAccessPolicy rejects unrestricted Feishu login without an allowlist", () => {
+  const check = checkFeishuAccessPolicy({
+    FEISHU_ALLOW_ALL_USERS: "true",
+    FEISHU_ALLOWED_EMAILS: "",
+  });
+
+  assert.equal(check.ok, false);
+  assert.match(check.message, /FEISHU_ALLOW_ALL_USERS/);
+});
+
+test("checkFeishuAccessPolicy accepts restricted or allowlisted Feishu login", () => {
+  assert.equal(checkFeishuAccessPolicy({ FEISHU_ALLOW_ALL_USERS: "false" }).ok, true);
+  assert.equal(
+    checkFeishuAccessPolicy({
+      FEISHU_ALLOW_ALL_USERS: "true",
+      FEISHU_ALLOWED_EMAILS: "a@example.com,b@example.com",
+    }).ok,
+    true
+  );
 });
 
 test("checkRuntimeDependencies reports missing runtime packages", () => {

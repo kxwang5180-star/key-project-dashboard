@@ -13,6 +13,10 @@ export const DEFAULT_API_PATHS = [
   "/api",
   "/api/health",
   "/api/auth/me",
+  "/api/bootstrap",
+  "/api/projects",
+  "/api/reports",
+  "/api/governance",
 ];
 
 export const REQUIRED_FEISHU_SCOPES = [
@@ -87,6 +91,24 @@ export function checkFeishuScopes(value, requiredScopes = REQUIRED_FEISHU_SCOPES
     message: missing.length
       ? `缺少飞书权限：${missing.join(", ")}`
       : "飞书登录和群聊同步权限已覆盖",
+  };
+}
+
+export function checkFeishuAccessPolicy(env = {}) {
+  const allowAllUsers = String(env.FEISHU_ALLOW_ALL_USERS || "true").trim().toLowerCase() === "true";
+  const allowedEmails = String(env.FEISHU_ALLOWED_EMAILS || "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const ok = !allowAllUsers || allowedEmails.length > 0;
+  return {
+    name: "feishu-access-policy",
+    ok,
+    allowAllUsers,
+    allowedEmailCount: allowedEmails.length,
+    message: ok
+      ? "飞书登录访问策略已收敛"
+      : "FEISHU_ALLOW_ALL_USERS=true 且 FEISHU_ALLOWED_EMAILS 为空，生产环境会放开所有飞书账号登录；请关闭全量放行或配置白名单",
   };
 }
 

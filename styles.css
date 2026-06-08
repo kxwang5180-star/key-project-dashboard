@@ -23,7 +23,11 @@
   --violet-soft: #eeeafd;
   --shadow: 0 20px 56px rgba(32, 45, 68, 0.12);
   --shadow-soft: 0 10px 28px rgba(32, 45, 68, 0.08);
+  --shadow-lift: 0 18px 42px rgba(31, 45, 68, 0.14);
   --radius: 8px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.18);
 }
 
 * {
@@ -51,6 +55,28 @@ textarea {
 
 button {
   color: inherit;
+}
+
+button,
+[role="button"],
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring), var(--shadow-soft);
+}
+
+button:active,
+[role="button"]:active {
+  transform: translateY(0) scale(0.985);
 }
 
 main {
@@ -142,6 +168,7 @@ h3 {
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 760;
+  transition: background 0.18s var(--ease-smooth), color 0.18s var(--ease-smooth), transform 0.18s var(--ease-smooth);
 }
 
 .view-button.is-active {
@@ -161,11 +188,14 @@ h3 {
   font-weight: 760;
   box-shadow: var(--shadow-soft);
   white-space: nowrap;
+  transition: border-color 0.18s var(--ease-smooth), color 0.18s var(--ease-smooth), transform 0.18s var(--ease-smooth), box-shadow 0.18s var(--ease-smooth);
 }
 
 .profile-entry:hover {
   border-color: rgba(37, 99, 235, 0.35);
   color: var(--blue);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lift);
 }
 
 .is-hidden {
@@ -230,6 +260,18 @@ h3 {
 
 .app-view.is-active {
   display: block;
+  animation: view-enter 0.28s var(--ease-out);
+}
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .summary-grid {
@@ -248,7 +290,7 @@ h3 {
   background: var(--surface);
   box-shadow: var(--shadow-soft);
   padding: 18px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.22s var(--ease-out), background 0.22s var(--ease-out);
 }
 
 .summary-card::before {
@@ -273,7 +315,7 @@ h3 {
 .summary-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--card-accent, var(--blue)) 44%, var(--line));
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lift);
 }
 
 .attention-board {
@@ -755,7 +797,7 @@ h3 {
 .project-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(210px, 1.1fr) minmax(112px, 0.45fr) minmax(190px, 0.9fr) minmax(150px, 0.62fr);
+  grid-template-columns: minmax(210px, 1.1fr) minmax(112px, 0.45fr) minmax(190px, 0.9fr) minmax(150px, 0.62fr) auto;
   gap: 14px;
   align-items: center;
   min-height: 88px;
@@ -792,6 +834,18 @@ h3 {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.project-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.project-actions .tiny-action {
+  min-width: 56px;
+  text-align: center;
+  background: #ffffff;
 }
 
 .project-name strong {
@@ -3308,33 +3362,59 @@ button:disabled {
 
 .metric-visual-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 10px;
 }
 
 .metric-visual-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 92px;
   grid-template-rows: auto;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  min-height: 110px;
+  min-height: 132px;
   border: 1px solid color-mix(in srgb, var(--project-color, var(--blue)) 18%, var(--line));
   border-radius: 10px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--project-color, var(--blue)) 7%, white), rgba(255, 255, 255, 0.95)),
     #fff;
-  padding: 12px;
+  padding: 14px;
   cursor: pointer;
 }
 
 .metric-visual-card.is-number,
 .metric-visual-card.is-qualitative {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 92px;
 }
 
 .metric-visual-card.is-target {
   border-color: color-mix(in srgb, var(--project-color, var(--blue)) 28%, var(--line));
+}
+
+.metric-visual-card.is-status-achieved {
+  --metric-status-color: var(--green);
+  --metric-status-soft: var(--green-soft);
+}
+
+.metric-visual-card.is-status-in-progress {
+  --metric-status-color: var(--amber);
+  --metric-status-soft: var(--amber-soft);
+}
+
+.metric-visual-card.is-status-target-only,
+.metric-visual-card.is-status-empty {
+  --metric-status-color: var(--muted);
+  --metric-status-soft: #eef3f8;
+}
+
+.metric-visual-card.is-status-needs-review {
+  --metric-status-color: var(--violet);
+  --metric-status-soft: var(--violet-soft);
+}
+
+.metric-visual-card.is-status-observing {
+  --metric-status-color: var(--cyan);
+  --metric-status-soft: var(--cyan-soft);
 }
 
 .metric-visual-card.is-target-only {
@@ -3344,7 +3424,7 @@ button:disabled {
 }
 
 .metric-visual-card.is-expanded {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 92px;
   align-items: start;
 }
 
@@ -3403,11 +3483,14 @@ button:disabled {
 }
 
 .metric-ring-large {
-  width: 72px;
-  height: 72px;
+  width: 78px;
+  height: 78px;
 }
 
 .metric-pie {
+  background:
+    radial-gradient(circle at center, #fff 0 47%, transparent 48%),
+    conic-gradient(var(--metric-status-color, var(--project-color, var(--blue))) var(--chart-angle), #dbe5f0 0);
   box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.8);
 }
 
@@ -3418,9 +3501,24 @@ button:disabled {
 }
 
 .metric-visual-copy span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: color-mix(in srgb, var(--project-color, var(--blue)) 75%, #142033);
   font-size: 12px;
   font-weight: 840;
+}
+
+.metric-visual-copy .metric-status-badge {
+  flex: 0 0 auto;
+  min-height: 20px;
+  border-radius: 999px;
+  background: var(--metric-status-soft, var(--blue-soft));
+  color: var(--metric-status-color, var(--blue));
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .metric-visual-copy strong {
@@ -3444,7 +3542,16 @@ button:disabled {
 
 .metric-hero-visual {
   display: grid;
+  gap: 5px;
   place-items: center;
+  justify-self: end;
+  width: 92px;
+}
+
+.metric-hero-visual small {
+  color: var(--metric-status-color, var(--muted));
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .metric-chart-row {
@@ -3506,6 +3613,40 @@ button:disabled {
   font-weight: 920;
   line-height: 1;
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-target-stack {
+  display: grid;
+  align-self: center;
+  justify-self: end;
+  width: 92px;
+  min-height: 72px;
+  align-content: center;
+  gap: 6px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--metric-status-soft, color-mix(in srgb, var(--project-color, var(--blue)) 11%, white));
+  color: var(--metric-status-color, color-mix(in srgb, var(--project-color, var(--blue)) 76%, #142033));
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.metric-target-stack small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 840;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-target-stack strong {
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 920;
+  line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4181,6 +4322,141 @@ button:disabled {
 .modal-card p:last-child {
   color: var(--ink-soft);
   line-height: 1.72;
+}
+
+/* Interaction polish */
+.panel:hover,
+.metrics-section:hover,
+.calendar-panel:hover {
+  border-color: rgba(37, 99, 235, 0.24);
+  box-shadow: var(--shadow-lift);
+}
+
+.segment-button,
+.legend-chip,
+.project-row,
+.calendar-event,
+.calendar-more,
+.tiny-action,
+.secondary-action,
+.primary-action,
+.metric-visual-card,
+.submission-item,
+.attention-item,
+.risk-item {
+  will-change: transform;
+}
+
+.segment-button,
+.calendar-more,
+.tiny-action,
+.secondary-action,
+.primary-action {
+  transition:
+    transform 0.18s var(--ease-smooth),
+    background 0.18s var(--ease-smooth),
+    border-color 0.18s var(--ease-smooth),
+    color 0.18s var(--ease-smooth),
+    box-shadow 0.18s var(--ease-smooth);
+}
+
+.segment-button:hover,
+.calendar-more:hover,
+.tiny-action:hover,
+.secondary-action:hover,
+.primary-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 9px 20px rgba(31, 45, 68, 0.09);
+}
+
+.legend-chip,
+.project-row,
+.calendar-event,
+.metric-visual-card,
+.submission-item,
+.attention-item,
+.risk-item {
+  transition:
+    transform 0.22s var(--ease-out),
+    border-color 0.22s var(--ease-out),
+    background 0.22s var(--ease-out),
+    box-shadow 0.22s var(--ease-out);
+}
+
+.project-row:hover,
+.project-row.is-selected,
+.metric-visual-card:hover,
+.metric-visual-card.is-expanded,
+.submission-item:hover,
+.submission-item.is-expanded,
+.attention-item:hover,
+.risk-item:hover {
+  box-shadow: var(--shadow-lift);
+}
+
+.metric-visual-card:hover,
+.metric-visual-card.is-expanded,
+.submission-item:hover,
+.submission-item.is-expanded {
+  transform: translateY(-1px);
+}
+
+.calendar-day {
+  transition: background 0.2s var(--ease-smooth), box-shadow 0.2s var(--ease-smooth);
+}
+
+.calendar-day:hover {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.calendar-day-events,
+.project-hover,
+.metric-detail-panel,
+.submission-detail {
+  transition:
+    max-height 0.24s var(--ease-out),
+    opacity 0.2s var(--ease-smooth),
+    transform 0.24s var(--ease-out);
+}
+
+.calendar-day.is-expanded .calendar-day-events,
+.project-row:hover .project-hover {
+  transform: translateY(0);
+}
+
+.modal-backdrop.is-open {
+  animation: backdrop-enter 0.18s var(--ease-smooth);
+}
+
+.modal-backdrop.is-open .modal-card {
+  animation: modal-enter 0.24s var(--ease-out);
+}
+
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 @media (max-width: 1180px) {

@@ -24,10 +24,19 @@ import {
 import { hasMeaningfulReportProgress } from "./src/services/report-records.js";
 import { mergeBootstrapProjects } from "./src/ui/project-bootstrap.js";
 import { buildProjectUserGroups } from "./src/ui/identity-groups.js";
-import { buildReportProjectPickerState, getReportableProjectsForUser } from "./src/ui/report-projects.js";
+import {
+  buildReportProjectPickerState,
+  getReportableProjectsForUser,
+  hasMaintainableProjects,
+  resolveAllowedProjectView,
+  resolveAuthenticatedInitialProjectView,
+  resolveDefaultProjectView,
+  resolveProjectMaintenanceTarget,
+} from "./src/ui/report-projects.js";
 import { buildActionKey, isActionPending, setActionPending } from "./src/ui/action-state.js";
 import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js";
 import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
+import { getMetricTargetStatus } from "./src/ui/metric-status.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -129,7 +138,7 @@ function getInitialView() {
   if (hash === "register") return "register";
   if (hash === "report" || hash === "member") return "report";
   if (hash === "governance" || hash === "pmo") return "governance";
-  return "dashboard";
+  return resolveDefaultProjectView();
 }
 
 function getViewHash(view) {
@@ -141,10 +150,7 @@ function getViewHash(view) {
 }
 
 function getAllowedView(view) {
-  if (!memberProfile) return view === "register" ? "register" : "register";
-  if (view === "register" && !memberProfile.canManageIdentity) return memberProfile.isAdmin ? "dashboard" : "report";
-  if (!memberProfile.isAdmin) return "report";
-  return view;
+  return resolveAllowedProjectView(view, memberProfile);
 }
 
 function getCurrentReportWeek() {
@@ -330,7 +336,8 @@ async function loadCurrentUser() {
     memberProfile = normalizeAuthenticatedUser(payload.user);
     const preferredView = getInitialView();
     if (memberProfile) {
-      state.currentView = getAllowedView(preferredView);
+      state.currentView = resolveAuthenticatedInitialProjectView(preferredView, memberProfile);
+      window.location.hash = getViewHash(state.currentView);
     }
     if (memberProfile?.projectId) {
       const reportProjectSelect = document.querySelector("#reportProjectSelect");
@@ -1136,15 +1143,15 @@ function setProjectRiskItems(project, risks) {
 }
 
 function getMetricProgress(metric) {
+  const status = getMetricTargetStatus(metric);
+  if (status.progress !== null) return status.progress;
   const current = parseMetricNumber(metric.current);
-  const target = parseMetricNumber(metric.target);
-  if (target && current !== null) return clampPercent((current / target) * 100);
   if (current !== null && /%/.test(metric.current || "")) return clampPercent(current);
   return null;
 }
 
 function metricHasTarget(metric) {
-  return parseMetricNumber(metric.target) !== null;
+  return getMetricTargetStatus(metric).hasTarget;
 }
 
 function refreshProjectDerived(project) {
@@ -1344,11 +1351,11 @@ function renderViewSwitch() {
   document.body.classList.toggle("auth-page", state.currentView === "register");
   document.querySelectorAll("[data-view]").forEach((button) => {
     const view = button.dataset.view;
-    const memberOnlyAllowed = memberProfile && !memberProfile.isAdmin && view !== "report";
     const anonymousBlocked = !memberProfile && view !== "register";
-    const adminOnlyView = view === "governance" && !memberProfile?.isAdmin;
-    const identityOnlyView = view === "register" && memberProfile && !memberProfile.canManageIdentity;
-    button.classList.toggle("is-hidden", Boolean(memberOnlyAllowed || anonymousBlocked || adminOnlyView || identityOnlyView));
+    const hiddenForMember = Boolean(
+      memberProfile && view !== "calendar" && resolveAllowedProjectView(view, memberProfile) !== view
+    );
+    button.classList.toggle("is-hidden", Boolean(anonymousBlocked || hiddenForMember));
   });
   document.querySelectorAll(".view-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === state.currentView);
@@ -1575,9 +1582,9 @@ function renderProjectList() {
         : "暂无可识别节点";
 
       return `
-        <button class="project-row ${project.id === state.selectedId ? "is-selected" : ""}" data-project="${
+        <article class="project-row ${project.id === state.selectedId ? "is-selected" : ""}" data-project="${
         project.id
-      }" style="--project-color: ${project.color}">
+      }" role="button" tabindex="0" style="--project-color: ${project.color}">
           <span class="project-name">
             <strong>${escapeHtml(project.shortName)}</strong>
             <span>${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(formatProjectStageLabel(project.stage))}</span>
@@ -1601,13 +1608,16 @@ function renderProjectList() {
             <strong>${escapeHtml(metricLabel)}</strong>
             <span>${escapeHtml(metricSummary)}</span>
           </span>
+          <span class="project-actions">
+            <span class="tiny-action" role="button" tabindex="0" data-project-maintenance="${project.id}">详情</span>
+          </span>
           <span class="project-hover">
             <span><b>节点</b>${escapeHtml(compactText(hoverNode, 92))}</span>
             <span><b>指标</b>${escapeHtml(compactText(hoverMetric, 92))}</span>
             <span><b>风险</b>${escapeHtml(compactText(riskTip, 92))}</span>
             <span><b>更新</b>${escapeHtml(compactText(updateTip, 92))}</span>
           </span>
-        </button>
+        </article>
       `;
     })
     .join("");
@@ -2188,9 +2198,12 @@ function renderAuthCenter() {
         <span>默认项目：${escapeHtml(projects.find((project) => project.id === memberProfile.projectId)?.shortName || "未设置")}</span>
       </div>
       <div class="auth-actions">
-        <button class="primary-action compact-action" type="button" data-view="${memberProfile.isAdmin ? "dashboard" : "report"}">${
-          memberProfile.isAdmin ? "进入管理看板" : "进入项目维护"
-        }</button>
+        <button class="primary-action compact-action" type="button" data-view="calendar">进入里程碑日历</button>
+        ${
+          hasMaintainableProjects(memberProfile)
+            ? '<button class="secondary-action" type="button" data-view="report">项目维护</button>'
+            : ""
+        }
         <button class="secondary-action" type="button" data-logout>退出登录</button>
       </div>
     </div>
@@ -2644,25 +2657,33 @@ function renderMetricDetail(metric, isExpanded) {
 }
 
 function renderMetricVisual(metric, index, project) {
+  const status = getMetricTargetStatus(metric);
   const progress = getMetricProgress(metric);
-  const hasTarget = metricHasTarget(metric);
+  const hasTarget = status.hasTarget;
   const hasNumber = parseMetricNumber(metric.current) !== null;
-  const hasCurrentText = Boolean(String(metric.current || "").trim());
-  const hasTargetOnly = hasTarget && !String(metric.current || "").trim();
+  const hasCurrentText = status.hasCurrent;
+  const hasTargetOnly = status.key === "target-only";
   const toneClass = hasTarget ? "is-target" : hasNumber ? "is-number" : "is-qualitative";
-  const label = hasTargetOnly ? "目标值" : hasTarget ? "目标达成" : hasCurrentText ? "当前值" : "观测口径";
+  const statusClass = `is-status-${status.key}`;
+  const label = hasTarget ? "目标状态" : hasCurrentText ? "当前值" : "观测口径";
   const metricKey = `${project.id}:${metric.id || index}`;
   const expanded = isExpandedKey(state.expandedMetricDetails, metricKey);
+  const targetLine = metric.target ? `目标 ${metric.target}` : "未设置目标";
+  const currentLine = metric.current ? `当前 ${metric.current}` : "当前待填";
+  const statusBadge = `<span class="metric-status-badge ${statusClass}">${escapeHtml(status.label)}</span>`;
 
   if (hasTargetOnly) {
     return `
-      <article class="metric-visual-card ${toneClass} is-target-only ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
+      <article class="metric-visual-card ${toneClass} ${statusClass} is-target-only ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
         <div class="metric-visual-copy">
-          <span>${label}</span>
+          <span>${statusBadge}${escapeHtml(label)}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
           <p>${escapeHtml(metric.observation || "仅维护目标值")}</p>
         </div>
-        <div class="metric-hero-value">${escapeHtml(metric.target || "待填目标")}</div>
+        <div class="metric-target-stack">
+          <small>目标</small>
+          <strong>${escapeHtml(metric.target || "待填目标")}</strong>
+        </div>
         ${renderMetricDetail(metric, expanded)}
       </article>
     `;
@@ -2670,14 +2691,15 @@ function renderMetricVisual(metric, index, project) {
 
   if (progress !== null) {
     return `
-      <article class="metric-visual-card ${toneClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
+      <article class="metric-visual-card ${toneClass} ${statusClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
         <div class="metric-visual-copy">
-          <span>${label}</span>
+          <span>${statusBadge}${escapeHtml(label)}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-          <p>${escapeHtml(metric.current || "待填当前值")}${metric.target ? ` / 目标 ${escapeHtml(metric.target)}` : ""}</p>
+          <p>${escapeHtml(currentLine)} · ${escapeHtml(targetLine)}</p>
         </div>
         <div class="metric-hero-visual">
           <div class="metric-ring metric-ring-large metric-pie"><span>${progress}%</span></div>
+          <small>${escapeHtml(status.label)}</small>
         </div>
         ${renderMetricDetail(metric, expanded)}
       </article>
@@ -2685,13 +2707,16 @@ function renderMetricVisual(metric, index, project) {
   }
 
   return `
-    <article class="metric-visual-card ${toneClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
+    <article class="metric-visual-card ${toneClass} ${statusClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
       <div class="metric-visual-copy">
-        <span>${label}</span>
+        <span>${statusBadge}${escapeHtml(label)}</span>
         <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
         <p>${escapeHtml(metric.observation || "未设置目标值，可先维护当前表现和观测口径。")}</p>
       </div>
-      <div class="metric-hero-value">${escapeHtml(metric.current || metric.target || "待填")}</div>
+      <div class="metric-target-stack">
+        <small>${hasTarget ? "当前/目标" : "当前"}</small>
+        <strong>${escapeHtml(metric.current || metric.target || "待填")}</strong>
+      </div>
       ${renderMetricDetail(metric, expanded)}
     </article>
   `;
@@ -3335,21 +3360,25 @@ function render() {
 }
 
 function openProjectMaintenance(projectId) {
-  const targetProject = getReportableProjects().find((project) => project.id === projectId) || projects.find((project) => project.id === projectId);
-  if (!targetProject) return;
-  state.selectedId = targetProject.id;
+  const target = resolveProjectMaintenanceTarget(projects, memberProfile, projectId);
+  if (!target.ok) {
+    state.saveNotice = "你没有该项目的维护权限。";
+    return;
+  }
+  state.selectedId = target.projectId;
   state.currentView = "report";
   resetAllDrafts();
   resetReportEditorState();
-  if (memberProfile) memberProfile.projectId = targetProject.id;
+  if (memberProfile) memberProfile.projectId = target.projectId;
   window.location.hash = getViewHash(state.currentView);
   render();
   const select = document.querySelector("#reportProjectSelect");
-  if (select) select.value = targetProject.id;
+  if (select) select.value = target.projectId;
   const milestone = getReportMilestone(getReportProject());
   state.selectedWeek = milestone ? getMilestoneWindow(getReportProject(), milestone).currentWeek || 1 : CURRENT_REPORT_WEEK;
   syncReportMilestoneFields();
   renderMemberWorkspace();
+  document.querySelector("#memberReportPanel")?.scrollIntoView({ block: "start" });
 }
 
 document.addEventListener("click", async (event) => {
@@ -3990,12 +4019,14 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const projectMaintenanceButton = event.target.closest("[data-project-maintenance]");
+  if (projectMaintenanceButton) {
+    openProjectMaintenance(projectMaintenanceButton.dataset.projectMaintenance);
+    return;
+  }
+
   const projectButton = event.target.closest("[data-project]");
   if (projectButton) {
-    if (projectButton.classList.contains("project-row")) {
-      openProjectMaintenance(projectButton.dataset.project);
-      return;
-    }
     state.selectedId = projectButton.dataset.project;
     state.detailTab = "overview";
     renderProjectList();
@@ -4106,7 +4137,9 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
-  const clickableDetail = event.target.closest("[data-toggle-metric-detail], [data-toggle-submission-detail]");
+  const clickableDetail = event.target.closest(
+    "[data-toggle-metric-detail], [data-toggle-submission-detail], [data-project-maintenance], .project-row"
+  );
   if (!clickableDetail) return;
   event.preventDefault();
   clickableDetail.click();
