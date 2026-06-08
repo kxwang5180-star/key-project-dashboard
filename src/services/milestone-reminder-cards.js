@@ -45,30 +45,21 @@ function openUrlBehavior(url) {
   };
 }
 
-function callbackBehavior(value) {
-  return {
-    type: "callback",
-    value,
-  };
-}
-
-function button({ text, type = "default", behaviors, elementId, disabled = false, disabledTips = "" }) {
+function button({ text, type = "default", behaviors, elementId }) {
   return {
     tag: "button",
-    element_id: elementId || "btn_ack",
+    element_id: elementId || "btn_open",
     type,
     size: "small",
     text: plainText(text),
-    disabled,
-    ...(disabledTips ? { disabled_tips: plainText(disabledTips) } : {}),
-    behaviors: disabled ? [] : behaviors,
+    behaviors,
   };
 }
 
 function buttonColumn(actionButton, options = {}) {
   return {
     tag: "column",
-    element_id: options.elementId || "col_ack",
+    element_id: options.elementId || "col_open",
     width: "auto",
     elements: [actionButton],
     padding: "0px 0px 0px 0px",
@@ -76,11 +67,10 @@ function buttonColumn(actionButton, options = {}) {
   };
 }
 
-function buildMilestoneRow(target, index = 0, baseUrl = "") {
+function buildMilestoneRow(target, index = 0) {
   const projectInfo = [
     target.businessLine ? `业务线：${target.businessLine}` : "",
   ].filter(Boolean);
-  const projectUrl = buildProjectUrl(baseUrl, target.projectId);
   const columns = [
     {
       tag: "column",
@@ -96,17 +86,6 @@ function buildMilestoneRow(target, index = 0, baseUrl = "") {
       vertical_align: "top",
     },
   ];
-  if (projectUrl) {
-    columns.push(buttonColumn(
-      button({
-        text: "去维护",
-        type: "primary",
-        behaviors: [openUrlBehavior(projectUrl)],
-        elementId: `btn_open_${index}`,
-      }),
-      { elementId: `col_open_${index}` }
-    ));
-  }
   return {
     tag: "column_set",
     element_id: `row_ms_${index}`,
@@ -134,29 +113,7 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
   const subtitle = options.subtitle || `${items.length} 个节点需要关注`;
   const template = options.template || "orange";
   const firstTarget = items[0] || {};
-  const callbackValue = {
-    action: "milestone_reminder_ack",
-    source: "milestone_reminder_card",
-    chatId: firstTarget.chatId || "",
-    projectIds: [...new Set(items.map((item) => item.projectId).filter(Boolean))],
-    milestoneIds: items.map((item) => item.milestoneId).filter(Boolean),
-    dueDates: [...new Set(items.map((item) => item.dueDate).filter(Boolean))],
-    baseUrl,
-    title,
-    subtitle,
-    template,
-    targets: items.map((item) => ({
-      chatId: item.chatId || "",
-      projectId: item.projectId || "",
-      projectName: item.projectName || "",
-      businessLine: item.businessLine || "",
-      milestoneId: item.milestoneId || "",
-      milestoneTitle: item.milestoneTitle || "",
-      dueDate: item.dueDate || "",
-      timing: item.timing || "",
-      timingLabel: item.timingLabel || "",
-    })),
-  };
+  const projectUrl = buildProjectUrl(baseUrl, firstTarget.projectId);
 
   const elements = [
     markdown("请关注以下重点项目里程碑，并在项目维护页及时更新节点进展。", { elementId: "md_intro", margin: "0px 0px 8px 0px" }),
@@ -165,21 +122,21 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
   let rowIndex = 0;
   for (const [label, groupItems] of groupTargetsByTiming(items).entries()) {
     elements.push(markdown(`**${label}**`, { elementId: `md_group_${rowIndex}`, margin: "8px 0px 0px 0px" }));
-    elements.push(...groupItems.map((target) => buildMilestoneRow(target, rowIndex++, baseUrl)));
+    elements.push(...groupItems.map((target) => buildMilestoneRow(target, rowIndex++)));
   }
 
   if (hiddenCount) {
     elements.push(markdown(`另有 ${hiddenCount} 个里程碑未在本卡片中展开，请进入项目看板查看。`, { elementId: "md_hidden", margin: "8px 0px 0px 0px" }));
   }
 
-  const actions = [button({
-    text: options.acknowledged ? "✅ 已知晓" : "我已知晓",
-    type: "default",
-    behaviors: [callbackBehavior(callbackValue)],
-    elementId: "btn_ack",
-    disabled: Boolean(options.acknowledged),
-    disabledTips: options.acknowledged ? "已记录知晓" : "",
-  })];
+  const actions = projectUrl
+    ? [button({
+        text: "去维护",
+        type: "primary",
+        behaviors: [openUrlBehavior(projectUrl)],
+        elementId: "btn_open",
+      })]
+    : [];
 
   elements.push({
     tag: "column_set",

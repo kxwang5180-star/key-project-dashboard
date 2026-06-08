@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildMilestoneReminderCallbackResponse,
   buildMilestoneReminderCard,
   buildMilestoneReminderCards,
   buildProjectScopedMilestoneReminderCards,
@@ -45,18 +44,16 @@ test("buildMilestoneReminderCard includes open url and callback button behaviors
   const card = buildMilestoneReminderCard([target], { baseUrl: "http://172.20.180.157/#report" });
   const actionSet = card.body.elements.at(-1);
   const row = card.body.elements.find((element) => element.element_id === "row_ms_0");
-  const rowButton = row.columns[1].elements[0];
   const buttons = actionSet.columns.flatMap((column) => column.elements);
 
   assert.equal(actionSet.tag, "column_set");
-  assert.equal(rowButton.text.content, "去维护");
-  assert.equal(rowButton.behaviors[0].type, "open_url");
-  assert.equal(rowButton.behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
+  assert.equal(row.columns.length, 1);
   assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].behaviors[0].type, "callback");
-  assert.deepEqual(buttons[0].behaviors[0].value.milestoneIds, ["m1"]);
-  assert.equal(buttons[0].behaviors[0].value.baseUrl, "http://172.20.180.157/#report");
-  assert.deepEqual(buttons[0].behaviors[0].value.targets.map((item) => item.projectId), ["project_1"]);
+  assert.equal(buttons[0].text.content, "去维护");
+  assert.equal(buttons[0].behaviors[0].type, "open_url");
+  assert.equal(buttons[0].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
+  assert.equal(JSON.stringify(card).includes("我已知晓"), false);
+  assert.equal(JSON.stringify(card).includes("milestone_reminder_ack"), false);
 });
 
 test("buildMilestoneReminderCards splits targets into multiple cards", () => {
@@ -82,21 +79,4 @@ test("buildProjectScopedMilestoneReminderCards sends test cards separately by pr
   assert.match(JSON.stringify(cards[0]), /合同系统/);
   assert.doesNotMatch(JSON.stringify(cards[0]), /数字化门迎/);
   assert.match(JSON.stringify(cards[1]), /数字化门迎/);
-});
-
-test("buildMilestoneReminderCallbackResponse acknowledges known action only", () => {
-  const response = buildMilestoneReminderCallbackResponse({
-    action: "milestone_reminder_ack",
-    baseUrl: "http://172.20.180.157/#report",
-    targets: [target],
-  });
-  const actionSet = response.card.body.elements.at(-1);
-  const ackButton = actionSet.columns.flatMap((column) => column.elements)[0];
-
-  assert.equal(response.toast.type, "success");
-  assert.equal(response.toast.content, "已记录知晓");
-  assert.equal(ackButton.text.content, "✅ 已知晓");
-  assert.equal(ackButton.disabled, true);
-  assert.deepEqual(ackButton.behaviors, []);
-  assert.equal(buildMilestoneReminderCallbackResponse({ action: "other" }).toast.type, "warning");
 });
