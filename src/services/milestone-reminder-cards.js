@@ -52,14 +52,16 @@ function callbackBehavior(value) {
   };
 }
 
-function button({ text, type = "default", behaviors, elementId }) {
+function button({ text, type = "default", behaviors, elementId, disabled = false, disabledTips = "" }) {
   return {
     tag: "button",
     element_id: elementId || "btn_ack",
     type,
     size: "small",
     text: plainText(text),
-    behaviors,
+    disabled,
+    ...(disabledTips ? { disabled_tips: plainText(disabledTips) } : {}),
+    behaviors: disabled ? [] : behaviors,
   };
 }
 
@@ -128,6 +130,9 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
   const items = Array.isArray(targets) ? targets.slice(0, CARD_MAX_TARGETS) : [];
   const hiddenCount = Math.max(0, (Array.isArray(targets) ? targets.length : 0) - items.length);
   const baseUrl = options.baseUrl || "";
+  const title = options.title || "重点项目里程碑提醒";
+  const subtitle = options.subtitle || `${items.length} 个节点需要关注`;
+  const template = options.template || "orange";
   const firstTarget = items[0] || {};
   const callbackValue = {
     action: "milestone_reminder_ack",
@@ -136,6 +141,21 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     projectIds: [...new Set(items.map((item) => item.projectId).filter(Boolean))],
     milestoneIds: items.map((item) => item.milestoneId).filter(Boolean),
     dueDates: [...new Set(items.map((item) => item.dueDate).filter(Boolean))],
+    baseUrl,
+    title,
+    subtitle,
+    template,
+    targets: items.map((item) => ({
+      chatId: item.chatId || "",
+      projectId: item.projectId || "",
+      projectName: item.projectName || "",
+      businessLine: item.businessLine || "",
+      milestoneId: item.milestoneId || "",
+      milestoneTitle: item.milestoneTitle || "",
+      dueDate: item.dueDate || "",
+      timing: item.timing || "",
+      timingLabel: item.timingLabel || "",
+    })),
   };
 
   const elements = [
@@ -153,10 +173,12 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
   }
 
   const actions = [button({
-    text: "我已知晓",
+    text: options.acknowledged ? "✅ 已知晓" : "我已知晓",
     type: "default",
     behaviors: [callbackBehavior(callbackValue)],
     elementId: "btn_ack",
+    disabled: Boolean(options.acknowledged),
+    disabledTips: options.acknowledged ? "已记录知晓" : "",
   })];
 
   elements.push({
@@ -187,9 +209,9 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
       elements,
     },
     header: {
-      title: plainText(options.title || "重点项目里程碑提醒"),
-      subtitle: plainText(options.subtitle || `${items.length} 个节点需要关注`),
-      template: options.template || "orange",
+      title: plainText(title),
+      subtitle: plainText(subtitle),
+      template,
     },
   };
 }
@@ -201,6 +223,20 @@ export function buildMilestoneReminderCards(targets = [], options = {}) {
     cards.push(buildMilestoneReminderCard(items.slice(index, index + CARD_MAX_TARGETS), options));
   }
   return cards;
+}
+
+export function buildProjectScopedMilestoneReminderCards(targets = [], options = {}) {
+  const items = Array.isArray(targets) ? targets : [];
+  const projectGroups = items.reduce((groups, target) => {
+    const key = String(target?.projectId || target?.projectName || "unknown").trim() || "unknown";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(target);
+    return groups;
+  }, new Map());
+  return [...projectGroups.values()].map((projectTargets) => buildMilestoneReminderCard(projectTargets, {
+    ...options,
+    subtitle: options.subtitle || `${projectTargets.length} 个节点需要关注`,
+  }));
 }
 
 export function buildMilestoneReminderCallbackResponse(value = {}) {
@@ -218,5 +254,12 @@ export function buildMilestoneReminderCallbackResponse(value = {}) {
       type: "success",
       content: "已记录知晓",
     },
+    card: buildMilestoneReminderCard(Array.isArray(value.targets) ? value.targets : [], {
+      baseUrl: value.baseUrl || "",
+      title: value.title || "重点项目里程碑提醒",
+      subtitle: value.subtitle || `${Array.isArray(value.targets) ? value.targets.length : 0} 个节点需要关注`,
+      template: value.template || "green",
+      acknowledged: true,
+    }),
   };
 }

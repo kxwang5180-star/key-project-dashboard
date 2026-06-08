@@ -84,13 +84,14 @@
                   "tag": "plain_text",
                   "content": "去维护"
                 },
+                "disabled": false,
                 "behaviors": [
                   {
                     "type": "open_url",
-                    "default_url": "https://example.com/#report:project_test",
-                    "pc_url": "https://example.com/#report:project_test",
-                    "android_url": "https://example.com/#report:project_test",
-                    "ios_url": "https://example.com/#report:project_test"
+                    "default_url": "http://172.20.180.157/#report:project_test",
+                    "pc_url": "http://172.20.180.157/#report:project_test",
+                    "android_url": "http://172.20.180.157/#report:project_test",
+                    "ios_url": "http://172.20.180.157/#report:project_test"
                   }
                 ]
               }
@@ -122,6 +123,7 @@
                   "tag": "plain_text",
                   "content": "我已知晓"
                 },
+                "disabled": false,
                 "behaviors": [
                   {
                     "type": "callback",
@@ -137,6 +139,23 @@
                       ],
                       "dueDates": [
                         "2026-06-09"
+                      ],
+                      "baseUrl": "http://172.20.180.157/#report",
+                      "title": "重点项目里程碑提醒",
+                      "subtitle": "1 个节点需要关注",
+                      "template": "orange",
+                      "targets": [
+                        {
+                          "chatId": "oc_test",
+                          "projectId": "project_test",
+                          "projectName": "飞书机器人测试项目",
+                          "businessLine": "测试",
+                          "milestoneId": "milestone_test",
+                          "milestoneTitle": "验证机器人卡片消息推送效果",
+                          "dueDate": "2026-06-09",
+                          "timing": "tomorrow",
+                          "timingLabel": "明日到期"
+                        }
                       ]
                     }
                   }
