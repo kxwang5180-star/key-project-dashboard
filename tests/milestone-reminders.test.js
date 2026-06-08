@@ -14,6 +14,8 @@ test("getMilestoneReminderWindow returns tomorrow and today date keys", () => {
   assert.deepEqual(getMilestoneReminderWindow(new Date("2026-06-08T12:00:00.000Z")), [
     { timing: "tomorrow", label: "明日到期", dateKey: "2026-06-09" },
     { timing: "today", label: "今日到期", dateKey: "2026-06-08" },
+    { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-06" },
+    { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-07" },
   ]);
 });
 
@@ -21,6 +23,15 @@ test("getMilestoneReminderWindow uses China timezone by default", () => {
   assert.deepEqual(getMilestoneReminderWindow(new Date("2026-06-08T17:30:00.000Z")), [
     { timing: "tomorrow", label: "明日到期", dateKey: "2026-06-10" },
     { timing: "today", label: "今日到期", dateKey: "2026-06-09" },
+  ]);
+});
+
+test("getMilestoneReminderWindow catches non-workday due dates on the next workday", () => {
+  assert.deepEqual(getMilestoneReminderWindow(new Date("2026-06-08T02:30:00.000Z")), [
+    { timing: "tomorrow", label: "明日到期", dateKey: "2026-06-09" },
+    { timing: "today", label: "今日到期", dateKey: "2026-06-08" },
+    { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-06" },
+    { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-07" },
   ]);
 });
 
@@ -32,11 +43,12 @@ test("buildMilestoneReminderTargets selects due milestones with project chat ids
         name: "【KDS上菜房数字化】项目",
         shortName: "KDS上菜房数字化",
         feishuChatId: "oc_1",
-        milestones: [
-          { id: "m_today", title: "联调完成", dueDate: new Date("2026-06-08T00:00:00.000Z"), status: "IN_PROGRESS" },
-          { id: "m_tomorrow", title: "开发完成", dueDate: new Date("2026-06-09T00:00:00.000Z"), status: "PLANNED" },
-          { id: "m_done", title: "已完成节点", dueDate: new Date("2026-06-09T00:00:00.000Z"), status: "COMPLETED" },
-          { id: "m_later", title: "下周节点", dueDate: new Date("2026-06-15T00:00:00.000Z"), status: "PLANNED" },
+      milestones: [
+        { id: "m_today", title: "联调完成", dueDate: new Date("2026-06-08T00:00:00.000Z"), status: "IN_PROGRESS" },
+        { id: "m_tomorrow", title: "开发完成", dueDate: new Date("2026-06-09T00:00:00.000Z"), status: "PLANNED" },
+        { id: "m_weekend", title: "周末上线", dueDate: new Date("2026-06-07T00:00:00.000Z"), status: "PLANNED" },
+        { id: "m_done", title: "已完成节点", dueDate: new Date("2026-06-09T00:00:00.000Z"), status: "COMPLETED" },
+        { id: "m_later", title: "下周节点", dueDate: new Date("2026-06-15T00:00:00.000Z"), status: "PLANNED" },
         ],
       },
       {
@@ -54,6 +66,7 @@ test("buildMilestoneReminderTargets selects due milestones with project chat ids
     [
       ["oc_1", "m_tomorrow", "tomorrow", "2026-06-09"],
       ["oc_1", "m_today", "today", "2026-06-08"],
+      ["oc_1", "m_weekend", "catchup", "2026-06-07"],
     ]
   );
 });

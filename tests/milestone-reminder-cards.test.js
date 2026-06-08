@@ -43,13 +43,17 @@ test("buildMilestoneReminderCard gives body components stable JSON 2.0 element i
 test("buildMilestoneReminderCard includes open url and callback button behaviors", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
   const actionSet = card.body.elements.at(-1);
+  const row = card.body.elements.find((element) => element.element_id === "row_ms_0");
+  const rowButton = row.columns[1].elements[0];
   const buttons = actionSet.columns.flatMap((column) => column.elements);
 
   assert.equal(actionSet.tag, "column_set");
-  assert.equal(buttons[0].behaviors[0].type, "open_url");
-  assert.match(buttons[0].behaviors[0].default_url, /reportProject=project_1/);
-  assert.equal(buttons[1].behaviors[0].type, "callback");
-  assert.deepEqual(buttons[1].behaviors[0].value.milestoneIds, ["m1"]);
+  assert.equal(rowButton.text.content, "去维护");
+  assert.equal(rowButton.behaviors[0].type, "open_url");
+  assert.match(rowButton.behaviors[0].default_url, /#report:project_1$/);
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].behaviors[0].type, "callback");
+  assert.deepEqual(buttons[0].behaviors[0].value.milestoneIds, ["m1"]);
 });
 
 test("buildMilestoneReminderCards splits targets into multiple cards", () => {

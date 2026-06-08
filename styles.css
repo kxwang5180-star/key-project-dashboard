@@ -3391,69 +3391,48 @@ button:disabled {
 
 .metric-visual-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(240px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 9px;
 }
 
 .metric-visual-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-columns: minmax(0, 1fr) 78px;
   grid-template-rows: auto;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  min-height: 132px;
+  min-height: 106px;
   border: 1px solid color-mix(in srgb, var(--project-color, var(--blue)) 18%, var(--line));
   border-radius: 10px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--project-color, var(--blue)) 7%, white), rgba(255, 255, 255, 0.95)),
     #fff;
-  padding: 14px;
+  padding: 12px 12px 11px;
   cursor: pointer;
 }
 
 .metric-visual-card.is-number,
 .metric-visual-card.is-qualitative {
-  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-columns: minmax(0, 1fr) 78px;
 }
 
 .metric-visual-card.is-full {
   grid-template-columns: minmax(0, 1fr);
   align-content: center;
-  min-height: 122px;
+  min-height: 104px;
   border-color: color-mix(in srgb, var(--metric-status-color, var(--project-color, var(--blue))) 24%, var(--line));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--metric-status-soft, var(--blue-soft)) 56%, #fff), rgba(255, 255, 255, 0.96)),
     #fff;
-  padding: 20px 18px 18px;
-}
-
-.metric-visual-card.is-full .metric-visual-copy {
-  gap: 12px;
+  padding: 13px 14px;
 }
 
 .metric-visual-card.is-full .metric-visual-copy strong {
   color: #122033;
-  font-size: 19px;
+  font-size: 16px;
   line-height: 1.28;
-  -webkit-line-clamp: 3;
-}
-
-.metric-visual-card.is-full .metric-visual-copy span {
-  color: color-mix(in srgb, var(--metric-status-color, var(--project-color, var(--blue))) 72%, #42526a);
-}
-
-.metric-visual-card.is-full .metric-visual-copy.is-full-copy {
-  align-content: center;
-}
-
-.metric-visual-card.is-full .metric-visual-copy.is-full-copy span {
-  order: 2;
-  font-weight: 760;
-}
-
-.metric-visual-card.is-full .metric-visual-copy.is-full-copy strong {
-  order: 1;
+  -webkit-line-clamp: 2;
 }
 
 .metric-visual-card.is-full::after {
@@ -3512,7 +3491,7 @@ button:disabled {
 }
 
 .metric-visual-card.is-expanded {
-  grid-template-columns: minmax(0, 1fr) 92px;
+  grid-template-columns: minmax(0, 1fr) 78px;
   align-items: start;
 }
 
@@ -3575,8 +3554,8 @@ button:disabled {
 }
 
 .metric-ring-large {
-  width: 78px;
-  height: 78px;
+  width: 62px;
+  height: 62px;
 }
 
 .metric-pie {
@@ -3588,7 +3567,7 @@ button:disabled {
 
 .metric-visual-copy {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -3599,6 +3578,24 @@ button:disabled {
   color: color-mix(in srgb, var(--project-color, var(--blue)) 75%, #142033);
   font-size: 12px;
   font-weight: 840;
+}
+
+.metric-label-strip {
+  justify-self: start;
+}
+
+.metric-label-strip i {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-color, var(--blue)) 10%, #fff);
+  color: color-mix(in srgb, var(--project-color, var(--blue)) 78%, #142033);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .metric-visual-copy .metric-status-badge {
@@ -3637,7 +3634,7 @@ button:disabled {
   gap: 5px;
   place-items: center;
   justify-self: end;
-  width: 92px;
+  width: 78px;
 }
 
 .metric-hero-visual small {
@@ -3713,15 +3710,15 @@ button:disabled {
   display: grid;
   align-self: center;
   justify-self: end;
-  width: 92px;
-  min-height: 72px;
+  width: 78px;
+  min-height: 58px;
   align-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--metric-status-soft, color-mix(in srgb, var(--project-color, var(--blue)) 11%, white));
   color: var(--metric-status-color, color-mix(in srgb, var(--project-color, var(--blue)) 76%, #142033));
-  padding: 10px 8px;
+  padding: 8px 7px;
   text-align: center;
 }
 
@@ -3736,11 +3733,18 @@ button:disabled {
 
 .metric-target-stack strong {
   overflow: hidden;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 920;
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.metric-target-stack.has-tip::after {
+  right: 0;
+  left: auto;
+  width: min(360px, 78vw);
+  text-align: left;
 }
 
 .metric-maintenance {
@@ -3952,6 +3956,11 @@ button:disabled {
   padding: 8px 9px;
   outline: none;
   resize: vertical;
+}
+
+.brief-editor .brief-overview-input {
+  min-height: 132px;
+  line-height: 1.55;
 }
 
 .report-brief-card span,

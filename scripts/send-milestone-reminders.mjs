@@ -85,7 +85,7 @@ async function filterAlreadySentTargets(targets, now, options = {}) {
   if (!targetIds.length) return targets;
   const sentLogs = await prisma.auditLog.findMany({
     where: {
-      action: { in: ["milestone.reminder.today", "milestone.reminder.tomorrow"] },
+      action: { in: ["milestone.reminder.today", "milestone.reminder.tomorrow", "milestone.reminder.catchup"] },
       targetType: "milestone",
       targetId: { in: targetIds },
       createdAt: { gte: dayStart },

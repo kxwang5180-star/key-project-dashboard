@@ -1,17 +1,15 @@
 {
   "schema": "2.0",
   "config": {
-    "update_multi": true
-  },
-  "header": {
-    "template": "orange",
-    "title": {
-      "tag": "plain_text",
-      "content": "重点项目里程碑提醒"
-    },
-    "subtitle": {
-      "tag": "plain_text",
-      "content": "1 个节点需要关注"
+    "update_multi": true,
+    "style": {
+      "text_size": {
+        "normal_v2": {
+          "default": "normal",
+          "pc": "normal",
+          "mobile": "heading"
+        }
+      }
     }
   },
   "body": {
@@ -35,7 +33,6 @@
       {
         "tag": "column_set",
         "element_id": "row_ms_0",
-        "flex_mode": "none",
         "background_style": "grey",
         "horizontal_spacing": "8px",
         "columns": [
@@ -43,8 +40,6 @@
             "tag": "column",
             "element_id": "col_ms_0",
             "width": "weighted",
-            "weight": 1,
-            "vertical_align": "top",
             "elements": [
               {
                 "tag": "markdown",
@@ -70,7 +65,38 @@
                 "text_size": "notation",
                 "margin": "0px 0px 0px 0px"
               }
-            ]
+            ],
+            "padding": "8px 8px 8px 8px",
+            "vertical_spacing": "4px",
+            "vertical_align": "top"
+          },
+          {
+            "tag": "column",
+            "element_id": "col_open_0",
+            "width": "auto",
+            "elements": [
+              {
+                "tag": "button",
+                "element_id": "btn_open_0",
+                "type": "primary",
+                "size": "small",
+                "text": {
+                  "tag": "plain_text",
+                  "content": "去维护"
+                },
+                "behaviors": [
+                  {
+                    "type": "open_url",
+                    "default_url": "https://example.com/#report:project_test",
+                    "pc_url": "https://example.com/#report:project_test",
+                    "android_url": "https://example.com/#report:project_test",
+                    "ios_url": "https://example.com/#report:project_test"
+                  }
+                ]
+              }
+            ],
+            "padding": "0px 0px 0px 0px",
+            "vertical_align": "top"
           }
         ],
         "margin": "6px 0px 0px 0px"
@@ -84,38 +110,8 @@
         "columns": [
           {
             "tag": "column",
-            "element_id": "col_open",
-            "width": "auto",
-            "weight": 1,
-            "vertical_align": "top",
-            "elements": [
-              {
-                "tag": "button",
-                "element_id": "btn_open_project",
-                "type": "primary",
-                "size": "small",
-                "text": {
-                  "tag": "plain_text",
-                  "content": "打开维护页"
-                },
-                "behaviors": [
-                  {
-                    "type": "open_url",
-                    "default_url": "https://example.com/#reportProject=project_test",
-                    "pc_url": "https://example.com/#reportProject=project_test",
-                    "android_url": "https://example.com/#reportProject=project_test",
-                    "ios_url": "https://example.com/#reportProject=project_test"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "tag": "column",
             "element_id": "col_ack",
             "width": "auto",
-            "weight": 1,
-            "vertical_align": "top",
             "elements": [
               {
                 "tag": "button",
@@ -146,11 +142,24 @@
                   }
                 ]
               }
-            ]
+            ],
+            "padding": "0px 0px 0px 0px",
+            "vertical_align": "top"
           }
         ],
         "margin": "12px 0px 0px 0px"
       }
     ]
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "重点项目里程碑提醒"
+    },
+    "subtitle": {
+      "tag": "plain_text",
+      "content": "1 个节点需要关注"
+    },
+    "template": "orange"
   }
 }

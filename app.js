@@ -37,6 +37,12 @@ import { buildActionKey, isActionPending, setActionPending } from "./src/ui/acti
 import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js";
 import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
 import { getMetricTargetStatus } from "./src/ui/metric-status.js";
+import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
+import {
+  buildProjectMaintenanceHash,
+  parseProjectMaintenanceHash,
+  resolveInitialProjectViewFromHash,
+} from "./src/ui/project-links.js";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -62,6 +68,7 @@ const state = {
   milestoneEditMode: false,
   risksExpanded: false,
   selectedMilestone: null,
+  pendingMilestoneScrollId: null,
   saveNotice: "",
   reportSubmitting: false,
   pendingActions: {},
@@ -138,12 +145,11 @@ const draftStore = {
 };
 
 function getInitialView() {
-  const hash = window.location.hash.replace("#", "");
-  if (hash === "calendar") return "calendar";
-  if (hash === "register") return "register";
-  if (hash === "report" || hash === "member") return "report";
-  if (hash === "governance" || hash === "pmo") return "governance";
-  return resolveDefaultProjectView();
+  return resolveInitialProjectViewFromHash(window.location.hash, resolveDefaultProjectView());
+}
+
+function getInitialMaintenanceProjectId() {
+  return parseProjectMaintenanceHash(window.location.hash);
 }
 
 function getViewHash(view) {
@@ -340,6 +346,7 @@ async function loadCurrentUser() {
     const payload = await apiRequest("/api/auth/me");
     memberProfile = normalizeAuthenticatedUser(payload.user);
     const preferredView = getInitialView();
+    const linkedProjectId = getInitialMaintenanceProjectId();
     if (memberProfile) {
       state.currentView = resolveAuthenticatedInitialProjectView(preferredView, memberProfile);
       window.location.hash = getViewHash(state.currentView);
@@ -350,6 +357,17 @@ async function loadCurrentUser() {
     }
     if (memberProfile) {
       await loadBootstrapData();
+      if (linkedProjectId && state.currentView === "report") {
+        const target = resolveProjectMaintenanceTarget(projects, memberProfile, linkedProjectId);
+        if (target.ok) {
+          state.selectedId = target.projectId;
+          memberProfile.projectId = target.projectId;
+          window.location.hash = buildProjectMaintenanceHash(target.projectId);
+        } else {
+          state.saveNotice = "你没有该项目的维护权限。";
+          window.location.hash = getViewHash(state.currentView);
+        }
+      }
     }
     if (memberProfile?.canManageIdentity) {
       await loadFeishuChats();
@@ -2525,7 +2543,7 @@ function renderReportProjectBrief() {
               </label>
               <label>
                 <span>项目概述</span>
-                <textarea rows="3" data-brief-field="overview" placeholder="补充项目目标、范围和当前重点">${escapeHtml(brief.overview)}</textarea>
+                <textarea rows="6" class="brief-overview-input" data-brief-field="overview" placeholder="补充项目目标、范围和当前重点">${escapeHtml(brief.overview)}</textarea>
               </label>
               <label>
                 <span>项目组构成</span>
@@ -2685,8 +2703,8 @@ function renderMetricTargetStack({ label, value }) {
   const text = String(value || "").trim();
   if (!text || text === "-") return "";
   return `
-    <div class="metric-target-stack">
-      <small>${escapeHtml(label)}</small>
+    <div class="metric-target-stack has-tip" data-tip="${escapeHtml(label)}">
+      <small>目标</small>
       <strong>${escapeHtml(text)}</strong>
     </div>
   `;
@@ -2696,20 +2714,11 @@ function getMetricCardClass({ toneClass, statusClass, expanded, hasSide }) {
   return `metric-visual-card ${toneClass} ${statusClass} ${hasSide ? "has-side" : "is-full"} ${expanded ? "is-expanded" : ""}`;
 }
 
-function renderMetricVisualCopy({ metric, index, label, statusBadge, isFull }) {
+function renderMetricVisualCopy({ metric, index, statusBadge }) {
   const metricName = escapeHtml(metric.name || `指标 ${index + 1}`);
-  const meta = `<span>${statusBadge}${escapeHtml(label)}</span>`;
-  if (isFull) {
-    return `
-      <div class="metric-visual-copy is-full-copy">
-        <strong>${metricName}</strong>
-        ${meta}
-      </div>
-    `;
-  }
   return `
     <div class="metric-visual-copy">
-      ${meta}
+      <span class="metric-label-strip"><i>目标</i>${statusBadge}</span>
       <strong>${metricName}</strong>
     </div>
   `;
@@ -2720,21 +2729,20 @@ function renderMetricVisual(metric, index, project) {
   const progress = getMetricProgress(metric);
   const hasTarget = status.hasTarget;
   const hasNumber = parseMetricNumber(metric.current) !== null;
-  const hasCurrentText = status.hasCurrent;
   const hasTargetOnly = status.key === "goal";
   const toneClass = hasTarget ? "is-target" : hasNumber ? "is-number" : "is-qualitative";
   const statusClass = `is-status-${status.key}`;
-  const label = hasTarget ? "目标状态" : hasCurrentText ? "当前值" : "观测口径";
   const metricKey = `${project.id}:${metric.id || index}`;
   const expanded = isExpandedKey(state.expandedMetricDetails, metricKey);
   const statusBadge = `<span class="metric-status-badge ${statusClass}">${escapeHtml(status.label)}</span>`;
+  const targetDetail = buildMetricTargetDetail(metric);
 
   if (hasTargetOnly) {
-    const side = renderMetricTargetStack({ label: "目标", value: metric.target || "待填目标" });
+    const side = renderMetricTargetStack({ label: targetDetail, value: metric.target || "待填目标" });
     const hasSide = Boolean(side);
     return `
       <article class="${getMetricCardClass({ toneClass: `${toneClass} is-target-only`, statusClass, expanded, hasSide })}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-        ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: !hasSide })}
+        ${renderMetricVisualCopy({ metric, index, statusBadge })}
         ${side}
         ${renderMetricDetail(metric, expanded)}
       </article>
@@ -2744,7 +2752,7 @@ function renderMetricVisual(metric, index, project) {
   if (progress !== null) {
     return `
       <article class="metric-visual-card ${toneClass} ${statusClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-        ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: false })}
+        ${renderMetricVisualCopy({ metric, index, statusBadge })}
         <div class="metric-hero-visual">
           <div class="metric-ring metric-ring-large metric-pie"><span>${progress}%</span></div>
           <small>${escapeHtml(status.label)}</small>
@@ -2754,11 +2762,11 @@ function renderMetricVisual(metric, index, project) {
     `;
   }
 
-  const side = renderMetricTargetStack({ label: hasTarget ? "当前/目标" : "当前", value: metric.current || metric.target });
+  const side = renderMetricTargetStack({ label: targetDetail, value: metric.current || metric.target });
   const hasSide = Boolean(side);
   return `
     <article class="${getMetricCardClass({ toneClass, statusClass, expanded, hasSide })}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-      ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: !hasSide })}
+      ${renderMetricVisualCopy({ metric, index, statusBadge })}
       ${side}
       ${renderMetricDetail(metric, expanded)}
     </article>
@@ -2930,6 +2938,19 @@ function renderReportMilestoneRail() {
       `;
     })
     .join("");
+  scrollPendingMilestoneEditorIntoView(container);
+}
+
+function scrollPendingMilestoneEditorIntoView(container) {
+  const milestoneId = state.pendingMilestoneScrollId;
+  if (!milestoneId) return;
+  state.pendingMilestoneScrollId = null;
+  requestAnimationFrame(() => {
+    const target = [...container.querySelectorAll("[data-edit-milestone]")]
+      .find((item) => item.dataset.editMilestone === milestoneId);
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    target?.querySelector("input, textarea, select")?.focus({ preventScroll: true });
+  });
 }
 
 function renderWeekTimeline() {
@@ -3413,7 +3434,7 @@ function openProjectMaintenance(projectId) {
   resetAllDrafts();
   resetReportEditorState();
   if (memberProfile) memberProfile.projectId = target.projectId;
-  window.location.hash = getViewHash(state.currentView);
+  window.location.hash = buildProjectMaintenanceHash(target.projectId);
   render();
   const select = document.querySelector("#reportProjectSelect");
   if (select) select.value = target.projectId;
@@ -3947,8 +3968,18 @@ document.addEventListener("click", async (event) => {
   const milestoneManageToggle = event.target.closest("#milestoneManageToggle");
   if (milestoneManageToggle) {
     const project = getReportProject();
-    if (!state.milestoneManageMode) ensureMilestoneDraft(project);
-    else resetMilestoneDraft(project.id);
+    if (!state.milestoneManageMode) {
+      ensureMilestoneDraft(project);
+      const selectedMilestoneId = state.selectedMilestone || state.selectedReportMilestoneId;
+      const target = getReportMilestones(project).find((milestone) => milestone.id === selectedMilestoneId);
+      if (target) {
+        state.selectedReportMilestoneId = target.id;
+        state.pendingMilestoneScrollId = target.id;
+      }
+    } else {
+      resetMilestoneDraft(project.id);
+      state.pendingMilestoneScrollId = null;
+    }
     state.milestoneManageMode = !state.milestoneManageMode;
     preserveScrollPosition(() => renderReportMilestoneRail());
     return;

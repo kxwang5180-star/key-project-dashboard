@@ -1,5 +1,5 @@
 const SKIPPED_MILESTONE_STATUSES = new Set(["COMPLETED", "completed", "done"]);
-const TIMING_ORDER = ["tomorrow", "today"];
+const TIMING_ORDER = ["tomorrow", "today", "catchup"];
 const DEFAULT_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 const DEFAULT_MAX_MESSAGE_CHARS = 3200;
 
@@ -20,6 +20,16 @@ function addDaysInTimezone(date, days, timezoneOffsetMinutes = DEFAULT_TIMEZONE_
   return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + days));
 }
 
+function isWeekendDateKey(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function isWorkdayDateKey(dateKey) {
+  return !isWeekendDateKey(dateKey);
+}
+
 function normalizeProjectName(project) {
   return String(project?.shortName || project?.name || "未命名项目").trim();
 }
@@ -37,10 +47,23 @@ function shouldRemindMilestone(milestone) {
 
 export function getMilestoneReminderWindow(now = new Date(), options = {}) {
   const timezoneOffsetMinutes = options.timezoneOffsetMinutes ?? DEFAULT_TIMEZONE_OFFSET_MINUTES;
-  return [
+  const todayKey = toDateKey(now, timezoneOffsetMinutes);
+  const items = [
     { timing: "tomorrow", label: "明日到期", dateKey: toDateKey(addDaysInTimezone(now, 1, timezoneOffsetMinutes)) },
-    { timing: "today", label: "今日到期", dateKey: toDateKey(now, timezoneOffsetMinutes) },
+    { timing: "today", label: "今日到期", dateKey: todayKey },
   ];
+  if (isWorkdayDateKey(todayKey)) {
+    for (let offset = 1; offset <= 3; offset += 1) {
+      const previousKey = toDateKey(addDaysInTimezone(now, -offset, timezoneOffsetMinutes));
+      if (!isWeekendDateKey(previousKey)) break;
+      items.push({ timing: "catchup", label: "非工作日到期", dateKey: previousKey });
+    }
+  }
+  return items.sort((left, right) => {
+    const timingDelta = TIMING_ORDER.indexOf(left.timing) - TIMING_ORDER.indexOf(right.timing);
+    if (timingDelta) return timingDelta;
+    return left.dateKey.localeCompare(right.dateKey);
+  });
 }
 
 export function buildMilestoneReminderTargets(projects = [], now = new Date(), options = {}) {
