@@ -4,6 +4,7 @@ import { buildMilestoneReminderCards } from "../src/services/milestone-reminder-
 import {
   buildMilestoneReminderMessages,
   buildMilestoneReminderTargets,
+  filterReminderTargetsBySentLogs,
   getMilestoneReminderAction,
   getMilestoneReminderDateRange,
   getMilestoneReminderTargetId,
@@ -23,6 +24,7 @@ function parseArgs(argv) {
   return {
     send: argv.includes("--send"),
     text: argv.includes("--text"),
+    includeSent: argv.includes("--include-sent"),
     now: argv.find((item) => item.startsWith("--now="))?.slice("--now=".length) || "",
     maxChars: Number(argv.find((item) => item.startsWith("--max-chars="))?.slice("--max-chars=".length) || 3200),
     baseUrl: argv.find((item) => item.startsWith("--base-url="))?.slice("--base-url=".length) || process.env.PUBLIC_BASE_URL || "",
@@ -91,8 +93,7 @@ async function filterAlreadySentTargets(targets, now, options = {}) {
     },
     select: { action: true, targetId: true },
   });
-  const sentKeys = new Set(sentLogs.map((log) => `${log.action}:${log.targetId}`));
-  return targets.filter((target) => !sentKeys.has(`${getMilestoneReminderAction(target)}:${getMilestoneReminderTargetId(target)}`));
+  return filterReminderTargetsBySentLogs(targets, sentLogs);
 }
 
 async function markTargetsSent(targets) {
@@ -123,7 +124,7 @@ async function main() {
   const reminderOptions = { timezoneOffsetMinutes: args.timezoneOffsetMinutes };
   const projects = await loadProjectsForReminder(now, reminderOptions);
   const rawTargets = buildMilestoneReminderTargets(projects, now, reminderOptions);
-  const targets = args.send ? await filterAlreadySentTargets(rawTargets, now, reminderOptions) : rawTargets;
+  const targets = args.includeSent ? rawTargets : await filterAlreadySentTargets(rawTargets, now, reminderOptions);
   const grouped = groupMilestoneReminderTargets(targets);
   const tenantAccessToken = args.send ? await fetchTenantAccessToken() : "";
 

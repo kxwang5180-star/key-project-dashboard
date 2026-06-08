@@ -146,6 +146,20 @@ export function getMilestoneReminderTargetId(target) {
   ].join(":");
 }
 
+export function filterReminderTargetsBySentLogs(targets = [], sentLogs = []) {
+  const items = Array.isArray(targets) ? targets : [];
+  const sentKeys = new Set(
+    (Array.isArray(sentLogs) ? sentLogs : [])
+      .map((log) => `${String(log?.action || "").trim()}:${String(log?.targetId || "").trim()}`)
+      .filter((key) => key !== ":")
+  );
+  if (!sentKeys.size) return items;
+  return items.filter((target) => {
+    const targetKey = `${getMilestoneReminderAction(target)}:${getMilestoneReminderTargetId(target)}`;
+    return !sentKeys.has(targetKey);
+  });
+}
+
 export function buildMilestoneReminderText(targets = []) {
   const items = sortMilestoneReminderTargets(targets);
   if (!items.length) return "";

@@ -4,6 +4,7 @@ import {
   buildMilestoneReminderMessages,
   buildMilestoneReminderTargets,
   buildMilestoneReminderText,
+  filterReminderTargetsBySentLogs,
   getMilestoneReminderDateRange,
   getMilestoneReminderAction,
   getMilestoneReminderTargetId,
@@ -178,4 +179,28 @@ test("getMilestoneReminderAction and getMilestoneReminderTargetId are stable for
     }),
     "p1:2026-06-30:tomorrow:节点"
   );
+});
+
+test("filterReminderTargetsBySentLogs keeps only reminders that have not been sent today", () => {
+  const targets = [
+    {
+      chatId: "oc_sent",
+      milestoneId: "m_sent",
+      timing: "today",
+    },
+    {
+      chatId: "oc_failed",
+      milestoneId: "m_failed",
+      timing: "today",
+    },
+  ];
+
+  const filtered = filterReminderTargetsBySentLogs(targets, [
+    {
+      action: "milestone.reminder.today",
+      targetId: "m_sent",
+    },
+  ]);
+
+  assert.deepEqual(filtered.map((target) => target.chatId), ["oc_failed"]);
 });

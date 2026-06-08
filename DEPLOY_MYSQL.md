@@ -218,6 +218,61 @@ npm run preflight -- --skip-http
 https://your-domain.com/api/auth/feishu/callback
 ```
 
+## 13. 飞书里程碑提醒
+
+里程碑提醒不是前端页面自动触发，而是在服务器上按时间执行脚本。脚本会按北京时间计算提醒窗口：
+
+- 明日到期
+- 今日到期
+- 周末或非工作日到期的节点，会在之后第一个工作日补发
+
+启用前确认 `.env` 至少包含：
+
+```bash
+FEISHU_APP_ID="cli_xxx"
+FEISHU_APP_SECRET="xxx"
+FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read im:message"
+PUBLIC_BASE_URL="http://172.20.180.157/#report"
+```
+
+项目必须已经在页面中绑定飞书群聊；脚本只会向已绑定 `feishuChatId` 的项目群发送。
+
+测试发送到“飞书机器人测试群”：
+
+```bash
+cd /srv/key-project-dashboard
+npm run feishu:test-card -- --today --date=2026-06-08 --chat-name="飞书机器人测试群" --send
+```
+
+正式发送当天所有应提醒节点：
+
+```bash
+cd /srv/key-project-dashboard
+npm run feishu:milestone-reminders:send -- --base-url="http://172.20.180.157/#report"
+```
+
+建议先不带 `--send` 做 dry-run，确认下一次实际会发到哪些群和哪些里程碑。dry-run 默认也会读取 `auditLog` 过滤已成功发送过的提醒：
+
+```bash
+cd /srv/key-project-dashboard
+npm run feishu:milestone-reminders -- --base-url="http://172.20.180.157/#report"
+```
+
+如果需要查看当天全部候选提醒，包括已经发送成功的记录，可以追加 `--include-sent`：
+
+```bash
+cd /srv/key-project-dashboard
+npm run feishu:milestone-reminders -- --base-url="http://172.20.180.157/#report" --include-sent
+```
+
+每天工作日上午 10:30 自动发送，可以在服务器执行 `crontab -e` 后加入：
+
+```cron
+30 10 * * 1-5 cd /srv/key-project-dashboard && /usr/bin/npm run feishu:milestone-reminders:send -- --base-url="http://172.20.180.157/#report" >> /var/log/key-project-milestone-reminders.log 2>&1
+```
+
+脚本会写入 `auditLog` 做去重；同一天同一里程碑同一提醒类型已经发送过，再次执行不会重复发送。
+
 当前测试服务器如果暂时没有域名，可先配置为：
 
 ```text

@@ -4604,10 +4604,12 @@ button:disabled {
 
   .milestone-maintainer {
     position: static;
+    height: auto;
+    max-height: none;
   }
 
   .metric-visual-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metric-maintenance-row,
@@ -4650,6 +4652,79 @@ button:disabled {
 
   .report-titlebar .report-project-picker {
     margin-left: 0;
+  }
+
+  .report-titlebar,
+  .metric-panel-head,
+  .metric-workbench-head,
+  .maintenance-toolbar,
+  .maintainer-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .report-project-picker {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
+    border-radius: 12px;
+    padding: 6px 7px 6px 11px;
+  }
+
+  .report-project-picker select {
+    width: 100%;
+    min-width: 0;
+    border-radius: 10px;
+  }
+
+  .project-metric-panel,
+  .report-card {
+    padding: 14px;
+  }
+
+  .maintainer-actions,
+  .milestone-focus-actions {
+    justify-content: flex-start;
+  }
+
+  .milestone-rail {
+    max-height: 360px;
+    padding-right: 2px;
+  }
+
+  .milestone-bead:hover,
+  .milestone-bead.is-active {
+    transform: none;
+  }
+
+  .milestone-focus-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .milestone-status-picker {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .milestone-status-picker select {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .milestone-focus.is-editing .milestone-inline-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-fill button,
+  .secondary-action,
+  .tiny-action {
+    min-height: 36px;
+    padding-inline: 12px;
+  }
+
+  .primary-action {
+    width: 100%;
   }
 
   .attention-board {
@@ -4704,6 +4779,15 @@ button:disabled {
 
   .week-timeline {
     grid-template-columns: repeat(6, minmax(34px, 1fr));
+  }
+
+  .report-check {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .report-check small {
+    grid-column: 2;
+    white-space: normal;
   }
 }
 
@@ -4819,5 +4903,139 @@ button:disabled {
   .metric-workbench-head {
     position: static;
     justify-content: flex-start;
+  }
+
+  .report-section {
+    padding: 48px 12px 12px;
+  }
+
+  .project-metric-panel,
+  .report-card,
+  .milestone-maintainer,
+  .week-board,
+  .milestone-focus,
+  .report-section {
+    border-radius: 10px;
+  }
+
+  .maintenance-layout,
+  .maintenance-editor,
+  .project-metric-panel {
+    gap: 12px;
+  }
+
+  .maintainer-head strong {
+    margin-top: 0;
+  }
+
+  .maintainer-actions,
+  .milestone-focus-actions,
+  .quick-fill {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .maintainer-actions button,
+  .milestone-focus-actions button,
+  .quick-fill button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .milestone-bead {
+    padding: 6px 2px 6px 0;
+  }
+
+  .milestone-bead-main {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .milestone-rail::before {
+    left: 20px;
+  }
+
+  .bead-dot {
+    width: 42px;
+    height: 32px;
+    font-size: 10px;
+  }
+
+  .milestone-maintenance-row {
+    margin-left: 52px;
+    padding-left: 8px;
+  }
+
+  .mini-week-strip {
+    padding-left: 52px;
+  }
+
+  .milestone-delete-float {
+    top: 4px;
+    right: 2px;
+  }
+
+  .milestone-bead.is-managing .milestone-bead-main {
+    padding-right: 50px;
+  }
+
+  .metric-visual-card,
+  .metric-visual-card.is-number,
+  .metric-visual-card.is-qualitative,
+  .metric-visual-card.is-expanded {
+    grid-template-columns: minmax(0, 1fr) 70px;
+    min-height: 92px;
+    padding: 11px;
+  }
+
+  .metric-visual-card.is-full,
+  .metric-visual-card.is-expanded.is-full {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric-hero-visual {
+    min-width: 0;
+  }
+
+  .metric-ring-large {
+    width: 54px;
+    height: 54px;
+  }
+
+  .metric-visual-copy strong {
+    font-size: 14px;
+  }
+
+  .metric-visual-copy span {
+    flex-wrap: wrap;
+  }
+
+  .report-status-card {
+    grid-template-columns: 44px minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .status-orbit {
+    width: 40px;
+    height: 40px;
+  }
+
+  .status-orbit strong {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 380px) {
+  .metric-visual-card,
+  .metric-visual-card.is-number,
+  .metric-visual-card.is-qualitative,
+  .metric-visual-card.is-expanded {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric-hero-visual {
+    justify-items: start;
+    place-items: start;
   }
 }
