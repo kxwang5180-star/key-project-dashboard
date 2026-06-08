@@ -4,6 +4,7 @@ import {
   buildMilestoneReminderMessages,
   buildMilestoneReminderTargets,
   buildMilestoneReminderText,
+  getMilestoneReminderDateRange,
   getMilestoneReminderAction,
   getMilestoneReminderTargetId,
   getMilestoneReminderWindow,
@@ -33,6 +34,13 @@ test("getMilestoneReminderWindow catches non-workday due dates on the next workd
     { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-06" },
     { timing: "catchup", label: "非工作日到期", dateKey: "2026-06-07" },
   ]);
+});
+
+test("getMilestoneReminderDateRange exposes the exact database date scan window", () => {
+  const range = getMilestoneReminderDateRange(new Date("2026-06-08T02:30:00.000Z"));
+  assert.equal(range.minDate.toISOString(), "2026-06-06T00:00:00.000Z");
+  assert.equal(range.maxDate.toISOString(), "2026-06-09T00:00:00.000Z");
+  assert.deepEqual(range.dateKeys, ["2026-06-09", "2026-06-08", "2026-06-06", "2026-06-07"]);
 });
 
 test("buildMilestoneReminderTargets selects due milestones with project chat ids", () => {

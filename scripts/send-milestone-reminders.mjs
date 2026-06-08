@@ -5,6 +5,7 @@ import {
   buildMilestoneReminderMessages,
   buildMilestoneReminderTargets,
   getMilestoneReminderAction,
+  getMilestoneReminderDateRange,
   getMilestoneReminderTargetId,
   getMilestoneReminderWindow,
   groupMilestoneReminderTargets,
@@ -34,10 +35,8 @@ function parseArgs(argv) {
 }
 
 async function loadProjectsForReminder(now, options = {}) {
-  const windowItems = getMilestoneReminderWindow(now, options);
-  const dates = windowItems.map((item) => dateFromKey(item.dateKey));
-  const minDate = new Date(Math.min(...dates.map((date) => date.getTime())));
-  const maxDate = new Date(Math.max(...dates.map((date) => date.getTime())));
+  const { minDate, maxDate } = getMilestoneReminderDateRange(now, options);
+  if (!minDate || !maxDate) return [];
 
   return prisma.project.findMany({
     where: {

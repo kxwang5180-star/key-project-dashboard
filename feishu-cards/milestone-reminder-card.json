@@ -89,7 +89,7 @@
                 "tag": "button",
                 "element_id": "btn_open",
                 "type": "primary",
-                "size": "small",
+                "size": "medium",
                 "text": {
                   "tag": "plain_text",
                   "content": "去维护"

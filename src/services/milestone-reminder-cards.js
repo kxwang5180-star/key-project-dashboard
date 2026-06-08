@@ -50,7 +50,7 @@ function button({ text, type = "default", behaviors, elementId }) {
     tag: "button",
     element_id: elementId || "btn_open",
     type,
-    size: "small",
+    size: "medium",
     text: plainText(text),
     behaviors,
   };

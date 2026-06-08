@@ -66,6 +66,17 @@ export function getMilestoneReminderWindow(now = new Date(), options = {}) {
   });
 }
 
+export function getMilestoneReminderDateRange(now = new Date(), options = {}) {
+  const windowItems = getMilestoneReminderWindow(now, options);
+  const dates = windowItems.map((item) => new Date(`${item.dateKey}T00:00:00.000Z`));
+  if (!dates.length) return { minDate: null, maxDate: null, dateKeys: [] };
+  return {
+    minDate: new Date(Math.min(...dates.map((date) => date.getTime()))),
+    maxDate: new Date(Math.max(...dates.map((date) => date.getTime()))),
+    dateKeys: windowItems.map((item) => item.dateKey),
+  };
+}
+
 export function buildMilestoneReminderTargets(projects = [], now = new Date(), options = {}) {
   const timezoneOffsetMinutes = options.timezoneOffsetMinutes ?? DEFAULT_TIMEZONE_OFFSET_MINUTES;
   const windowItems = getMilestoneReminderWindow(now, { timezoneOffsetMinutes });

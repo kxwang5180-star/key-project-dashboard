@@ -50,6 +50,7 @@ test("buildMilestoneReminderCard includes open url and callback button behaviors
   assert.equal(row.columns.length, 1);
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].text.content, "去维护");
+  assert.equal(buttons[0].size, "medium");
   assert.equal(buttons[0].behaviors[0].type, "open_url");
   assert.equal(buttons[0].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
   assert.equal(JSON.stringify(card).includes("我已知晓"), false);
