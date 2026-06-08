@@ -1,35 +1,24 @@
 {
   "schema": "2.0",
   "config": {
-    "update_multi": true,
-    "style": {
-      "text_size": {
-        "normal_v2": {
-          "default": "normal",
-          "pc": "normal",
-          "mobile": "heading"
-        }
-      }
-    }
+    "update_multi": true
   },
   "header": {
+    "template": "orange",
     "title": {
       "tag": "plain_text",
       "content": "重点项目里程碑提醒"
     },
     "subtitle": {
       "tag": "plain_text",
-      "content": "${milestone_count} 个节点需要关注"
-    },
-    "template": "orange",
-    "padding": "12px 12px 12px 12px"
+      "content": "1 个节点需要关注"
+    }
   },
   "body": {
-    "direction": "vertical",
-    "padding": "12px 12px 12px 12px",
     "elements": [
       {
         "tag": "markdown",
+        "element_id": "md_intro",
         "content": "请关注以下重点项目里程碑，并在项目维护页及时更新节点进展。",
         "text_align": "left",
         "text_size": "normal_v2",
@@ -37,61 +26,72 @@
       },
       {
         "tag": "markdown",
-        "content": "**${timing_label}**",
+        "element_id": "md_group_0",
+        "content": "**明日到期**",
         "text_align": "left",
         "text_size": "normal_v2",
         "margin": "8px 0px 0px 0px"
       },
       {
         "tag": "column_set",
-        "background_style": "grey-100",
+        "element_id": "row_ms_0",
+        "flex_mode": "none",
+        "background_style": "grey",
         "horizontal_spacing": "8px",
         "columns": [
           {
             "tag": "column",
+            "element_id": "col_ms_0",
             "width": "weighted",
+            "weight": 1,
+            "vertical_align": "top",
             "elements": [
               {
                 "tag": "markdown",
-                "content": "**${project_name}**",
+                "element_id": "md_project_0",
+                "content": "**飞书机器人测试项目**",
                 "text_align": "left",
                 "text_size": "normal_v2",
                 "margin": "0px 0px 4px 0px"
               },
               {
                 "tag": "markdown",
-                "content": "${milestone_title}",
+                "element_id": "md_title_0",
+                "content": "验证机器人卡片消息推送效果",
                 "text_align": "left",
                 "text_size": "normal_v2",
                 "margin": "0px 0px 0px 0px"
               },
               {
                 "tag": "markdown",
-                "content": "${due_date}｜业务线：${business_line}",
+                "element_id": "md_date_0",
+                "content": "2026-06-09｜业务线：测试",
                 "text_align": "left",
                 "text_size": "notation",
                 "margin": "0px 0px 0px 0px"
               }
-            ],
-            "padding": "8px 8px 8px 8px",
-            "vertical_spacing": "4px",
-            "vertical_align": "top"
+            ]
           }
         ],
         "margin": "6px 0px 0px 0px"
       },
       {
         "tag": "column_set",
+        "element_id": "row_actions",
         "flex_mode": "flow",
         "background_style": "default",
         "horizontal_spacing": "8px",
         "columns": [
           {
             "tag": "column",
+            "element_id": "col_open",
             "width": "auto",
+            "weight": 1,
+            "vertical_align": "top",
             "elements": [
               {
                 "tag": "button",
+                "element_id": "btn_open_project",
                 "type": "primary",
                 "size": "small",
                 "text": {
@@ -101,23 +101,25 @@
                 "behaviors": [
                   {
                     "type": "open_url",
-                    "default_url": "${project_url}",
-                    "pc_url": "${project_url}",
-                    "android_url": "${project_url}",
-                    "ios_url": "${project_url}"
+                    "default_url": "https://example.com/#reportProject=project_test",
+                    "pc_url": "https://example.com/#reportProject=project_test",
+                    "android_url": "https://example.com/#reportProject=project_test",
+                    "ios_url": "https://example.com/#reportProject=project_test"
                   }
                 ]
               }
-            ],
-            "padding": "0px 0px 0px 0px",
-            "vertical_align": "top"
+            ]
           },
           {
             "tag": "column",
+            "element_id": "col_ack",
             "width": "auto",
+            "weight": 1,
+            "vertical_align": "top",
             "elements": [
               {
                 "tag": "button",
+                "element_id": "btn_ack",
                 "type": "default",
                 "size": "small",
                 "text": {
@@ -130,23 +132,21 @@
                     "value": {
                       "action": "milestone_reminder_ack",
                       "source": "milestone_reminder_card",
-                      "chatId": "${chat_id}",
+                      "chatId": "oc_test",
                       "projectIds": [
-                        "${project_id}"
+                        "project_test"
                       ],
                       "milestoneIds": [
-                        "${milestone_id}"
+                        "milestone_test"
                       ],
                       "dueDates": [
-                        "${due_date}"
+                        "2026-06-09"
                       ]
                     }
                   }
                 ]
               }
-            ],
-            "padding": "0px 0px 0px 0px",
-            "vertical_align": "top"
+            ]
           }
         ],
         "margin": "12px 0px 0px 0px"

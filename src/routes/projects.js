@@ -46,7 +46,7 @@ projectRouter.get("/", asyncRoute(async (req, res) => {
   res.json(projects);
 }));
 
-projectRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+async function createProject(req, res) {
   if (!canManageIdentity(req.user)) {
     return res.status(403).json({ message: "只有身份管理员可以新增项目" });
   }
@@ -81,7 +81,10 @@ projectRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
     },
   });
   res.status(201).json({ project });
-}));
+}
+
+projectRouter.post("/", requireRoles("ADMIN"), asyncRoute(createProject));
+projectRouter.post("/create", requireRoles("ADMIN"), asyncRoute(createProject));
 
 projectRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
   if (!canManageIdentity(req.user)) {

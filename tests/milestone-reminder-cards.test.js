@@ -31,6 +31,15 @@ test("buildMilestoneReminderCard renders Feishu JSON 2.0 interactive card", () =
   assert.equal(JSON.stringify(card).includes('"tag":"action"'), false);
 });
 
+test("buildMilestoneReminderCard gives body components stable JSON 2.0 element ids", () => {
+  const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
+  const elements = card.body.elements;
+  assert.ok(elements.every((element) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(element.element_id)));
+  const row = elements.find((element) => element.element_id === "row_ms_0");
+  assert.ok(row.columns.every((column) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(column.element_id)));
+  assert.ok(row.columns[0].elements.every((element) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(element.element_id)));
+});
+
 test("buildMilestoneReminderCard includes open url and callback button behaviors", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
   const actionSet = card.body.elements.at(-1);

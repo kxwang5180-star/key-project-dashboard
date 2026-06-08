@@ -464,7 +464,7 @@ async function saveProjectChatBinding(projectId, chatId) {
 }
 
 async function createProjectRecord(draft) {
-  return apiRequest("/api/projects", {
+  return apiRequest("/api/projects/create", {
     method: "POST",
     body: JSON.stringify(draft),
   });
@@ -2337,9 +2337,9 @@ function renderAuthCenter() {
       <span>同步群聊后选择项目群，再同步成员。</span>
     </div>
     <div class="project-create-strip">
-      <input data-project-create-field="name" value="${escapeHtml(state.projectCreateDraft.name)}" placeholder="项目名称，如【飞书机器人测试】项目" />
-      <input data-project-create-field="shortName" value="${escapeHtml(state.projectCreateDraft.shortName)}" placeholder="简称" />
-      <input data-project-create-field="businessLine" value="${escapeHtml(state.projectCreateDraft.businessLine)}" placeholder="业务线" />
+      <input data-project-create-field="name" value="${escapeHtml(state.projectCreateDraft.name)}" placeholder="项目全称" />
+      <input data-project-create-field="shortName" value="${escapeHtml(state.projectCreateDraft.shortName)}" placeholder="项目简称" />
+      <input data-project-create-field="businessLine" value="${escapeHtml(state.projectCreateDraft.businessLine)}" placeholder="所属业务线" />
       <button class="primary-action compact-action" type="button" data-create-project>新增项目</button>
     </div>
     <div class="role-binding-list chat-binding-grid">
