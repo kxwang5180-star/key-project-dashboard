@@ -2656,20 +2656,29 @@ function renderMetricDetail(metric, isExpanded) {
   `;
 }
 
+function renderMetricTargetStack({ label, value }) {
+  const text = String(value || "").trim();
+  if (!text || text === "-") return "";
+  return `
+    <div class="metric-target-stack">
+      <small>${escapeHtml(label)}</small>
+      <strong>${escapeHtml(text)}</strong>
+    </div>
+  `;
+}
+
 function renderMetricVisual(metric, index, project) {
   const status = getMetricTargetStatus(metric);
   const progress = getMetricProgress(metric);
   const hasTarget = status.hasTarget;
   const hasNumber = parseMetricNumber(metric.current) !== null;
   const hasCurrentText = status.hasCurrent;
-  const hasTargetOnly = status.key === "target-only";
+  const hasTargetOnly = status.key === "goal";
   const toneClass = hasTarget ? "is-target" : hasNumber ? "is-number" : "is-qualitative";
   const statusClass = `is-status-${status.key}`;
   const label = hasTarget ? "目标状态" : hasCurrentText ? "当前值" : "观测口径";
   const metricKey = `${project.id}:${metric.id || index}`;
   const expanded = isExpandedKey(state.expandedMetricDetails, metricKey);
-  const targetLine = metric.target ? `目标 ${metric.target}` : "未设置目标";
-  const currentLine = metric.current ? `当前 ${metric.current}` : "当前待填";
   const statusBadge = `<span class="metric-status-badge ${statusClass}">${escapeHtml(status.label)}</span>`;
 
   if (hasTargetOnly) {
@@ -2678,12 +2687,8 @@ function renderMetricVisual(metric, index, project) {
         <div class="metric-visual-copy">
           <span>${statusBadge}${escapeHtml(label)}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-          <p>${escapeHtml(metric.observation || "仅维护目标值")}</p>
         </div>
-        <div class="metric-target-stack">
-          <small>目标</small>
-          <strong>${escapeHtml(metric.target || "待填目标")}</strong>
-        </div>
+        ${renderMetricTargetStack({ label: "目标", value: metric.target || "待填目标" })}
         ${renderMetricDetail(metric, expanded)}
       </article>
     `;
@@ -2695,7 +2700,6 @@ function renderMetricVisual(metric, index, project) {
         <div class="metric-visual-copy">
           <span>${statusBadge}${escapeHtml(label)}</span>
           <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-          <p>${escapeHtml(currentLine)} · ${escapeHtml(targetLine)}</p>
         </div>
         <div class="metric-hero-visual">
           <div class="metric-ring metric-ring-large metric-pie"><span>${progress}%</span></div>
@@ -2711,12 +2715,8 @@ function renderMetricVisual(metric, index, project) {
       <div class="metric-visual-copy">
         <span>${statusBadge}${escapeHtml(label)}</span>
         <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-        <p>${escapeHtml(metric.observation || "未设置目标值，可先维护当前表现和观测口径。")}</p>
       </div>
-      <div class="metric-target-stack">
-        <small>${hasTarget ? "当前/目标" : "当前"}</small>
-        <strong>${escapeHtml(metric.current || metric.target || "待填")}</strong>
-      </div>
+      ${renderMetricTargetStack({ label: hasTarget ? "当前/目标" : "当前", value: metric.current || metric.target })}
       ${renderMetricDetail(metric, expanded)}
     </article>
   `;

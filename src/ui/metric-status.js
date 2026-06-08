@@ -34,13 +34,13 @@ export function getMetricTargetStatus(metric = {}) {
     return { key: "observing", label: "观察中", progress: null, hasTarget: false, hasCurrent: true };
   }
   if (hasTarget && !hasCurrent) {
-    return { key: "target-only", label: "待填报", progress: null, hasTarget: true, hasCurrent: false };
+    return { key: "goal", label: "目标", progress: null, hasTarget: true, hasCurrent: false };
   }
   if (!hasTarget && !hasCurrent) {
     return { key: "empty", label: "待补充", progress: null, hasTarget: false, hasCurrent: false };
   }
   if (currentNumber === null || targetNumber === null || targetNumber === 0 || !isHigherBetterTarget(metric)) {
-    return { key: "needs-review", label: "需确认", progress: null, hasTarget: true, hasCurrent: true };
+    return { key: "tracking", label: "跟踪中", progress: null, hasTarget: true, hasCurrent: true };
   }
 
   const progress = clampMetricProgress((currentNumber / targetNumber) * 100);

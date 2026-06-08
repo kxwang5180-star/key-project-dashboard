@@ -15,10 +15,10 @@ test("getMetricTargetStatus marks percent targets as in progress until target is
   assert.equal(getMetricTargetStatus({ current: "105%", target: "100%" }).key, "achieved");
 });
 
-test("getMetricTargetStatus does not treat textual or inverse targets as achieved by default", () => {
+test("getMetricTargetStatus tracks textual or inverse targets without a confirmation warning", () => {
   assert.deepEqual(getMetricTargetStatus({ current: "多套", target: "1套" }), {
-    key: "needs-review",
-    label: "需确认",
+    key: "tracking",
+    label: "跟踪中",
     progress: null,
     hasTarget: true,
     hasCurrent: true,
@@ -26,6 +26,12 @@ test("getMetricTargetStatus does not treat textual or inverse targets as achieve
 });
 
 test("getMetricTargetStatus distinguishes target-only and current-only metrics", () => {
-  assert.equal(getMetricTargetStatus({ current: "-", target: "70%以上" }).key, "target-only");
+  assert.deepEqual(getMetricTargetStatus({ current: "-", target: "70%以上" }), {
+    key: "goal",
+    label: "目标",
+    progress: null,
+    hasTarget: true,
+    hasCurrent: false,
+  });
   assert.equal(getMetricTargetStatus({ current: "约85%", target: "-" }).key, "observing");
 });

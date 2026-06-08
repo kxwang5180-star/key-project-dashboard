@@ -3401,13 +3401,17 @@ button:disabled {
   --metric-status-soft: var(--amber-soft);
 }
 
-.metric-visual-card.is-status-target-only,
 .metric-visual-card.is-status-empty {
   --metric-status-color: var(--muted);
   --metric-status-soft: #eef3f8;
 }
 
-.metric-visual-card.is-status-needs-review {
+.metric-visual-card.is-status-goal {
+  --metric-status-color: var(--blue);
+  --metric-status-soft: var(--blue-soft);
+}
+
+.metric-visual-card.is-status-tracking {
   --metric-status-color: var(--violet);
   --metric-status-soft: var(--violet-soft);
 }
@@ -3418,9 +3422,10 @@ button:disabled {
 }
 
 .metric-visual-card.is-target-only {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--project-color, var(--blue)) 14%, var(--line));
-  opacity: 0.72;
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+  background:
+    linear-gradient(135deg, rgba(232, 240, 255, 0.86), rgba(255, 255, 255, 0.96)),
+    #fff;
 }
 
 .metric-visual-card.is-expanded {
