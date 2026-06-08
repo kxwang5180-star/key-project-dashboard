@@ -175,6 +175,57 @@ export async function fetchFeishuContactUser(userId, tenantAccessToken, options 
   return data.data?.user || null;
 }
 
+export async function sendFeishuTextMessage({ receiveId, text, tenantAccessToken, receiveIdType = "chat_id" }) {
+  const target = String(receiveId || "").trim();
+  const content = String(text || "").trim();
+  if (!target) throw new Error("Missing Feishu message receive_id");
+  if (!content) throw new Error("Missing Feishu message content");
+
+  const url = new URL(config.feishu.messagesUrl);
+  url.searchParams.set("receive_id_type", receiveIdType);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tenantAccessToken}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({
+      receive_id: target,
+      msg_type: "text",
+      content: JSON.stringify({ text: content }),
+    }),
+  });
+  const data = await parseFeishuResponse(response, "Failed to send Feishu message");
+  return data.data || {};
+}
+
+export async function sendFeishuCardMessage({ receiveId, card, tenantAccessToken, receiveIdType = "chat_id", uuid = "" }) {
+  const target = String(receiveId || "").trim();
+  if (!target) throw new Error("Missing Feishu message receive_id");
+  if (!card || typeof card !== "object") throw new Error("Missing Feishu card content");
+
+  const url = new URL(config.feishu.messagesUrl);
+  url.searchParams.set("receive_id_type", receiveIdType);
+  const body = {
+    receive_id: target,
+    msg_type: "interactive",
+    content: JSON.stringify(card),
+  };
+  const dedupeId = String(uuid || "").trim();
+  if (dedupeId) body.uuid = dedupeId.slice(0, 50);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tenantAccessToken}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await parseFeishuResponse(response, "Failed to send Feishu card message");
+  return data.data || {};
+}
+
 export async function fetchFeishuChatMemberNames(chatId, options = {}) {
   if (!chatId) throw new Error("Missing Feishu chat_id");
   const tenantAccessToken = await fetchTenantAccessToken();

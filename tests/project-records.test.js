@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyProjectBriefSnapshot,
+  buildProjectCreateData,
   buildProjectMilestoneCreateData,
   buildProjectMetricCreateData,
   buildProjectBriefUpdatePayload,
@@ -10,6 +11,33 @@ import {
   toPublicProjectMaintenanceState,
   toPublicProjectBrief,
 } from "../src/services/project-records.js";
+
+test("buildProjectCreateData fills required project fields for admin-created projects", () => {
+  assert.deepEqual(
+    buildProjectCreateData(
+      {
+        name: "【飞书机器人测试】项目",
+        businessLine: "测试",
+      },
+      { id: "project_test" }
+    ),
+    {
+      id: "project_test",
+      name: "【飞书机器人测试】项目",
+      shortName: "飞书机器人测试",
+      businessLine: "测试",
+      ownerName: null,
+      description: "",
+      metricsSummary: "",
+      keyNodesSummary: "",
+      futurePlan: "",
+      teamSummary: "",
+      established: true,
+      isKeyProject: true,
+      stage: "PLANNED",
+    }
+  );
+});
 
 test("toPublicProjectBrief maps persisted project brief to frontend shape", () => {
   assert.deepEqual(

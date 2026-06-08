@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { ProjectStage } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { asyncRoute } from "../lib/async-route.js";
@@ -11,6 +12,7 @@ import { resolveProjectMaintenanceAccess } from "../services/project-maintenance
 import {
   buildProjectMetricCreateData,
   buildProjectMilestoneCreateData,
+  buildProjectCreateData,
   splitMetricCreateDataForUpdate,
   toPublicProjectBrief,
   toPublicProjectMaintenanceState,
@@ -42,6 +44,66 @@ projectRouter.get("/", asyncRoute(async (req, res) => {
     },
   });
   res.json(projects);
+}));
+
+projectRouter.post("/", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以新增项目" });
+  }
+  const data = buildProjectCreateData(req.body, { id: `project_${randomUUID().replace(/-/g, "").slice(0, 16)}` });
+  if (!String(req.body?.name || req.body?.shortName || "").trim()) {
+    return res.status(400).json({ message: "项目名称必填" });
+  }
+  const project = await prisma.project.create({
+    data,
+    select: {
+      id: true,
+      name: true,
+      shortName: true,
+      businessLine: true,
+      ownerName: true,
+      description: true,
+      feishuChatId: true,
+      established: true,
+      stage: true,
+      updatedAt: true,
+    },
+  });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "project.create",
+    targetType: "Project",
+    targetId: project.id,
+    detail: {
+      name: project.name,
+      shortName: project.shortName,
+      businessLine: project.businessLine,
+    },
+  });
+  res.status(201).json({ project });
+}));
+
+projectRouter.delete("/:id", requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).json({ message: "只有身份管理员可以删除项目" });
+  }
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, shortName: true },
+  });
+  if (!project) return res.status(404).json({ message: "项目不存在" });
+  await prisma.project.delete({ where: { id: req.params.id } });
+  await writeAuditLog({
+    userId: req.user.id,
+    action: "project.delete",
+    targetType: "Project",
+    targetId: project.id,
+    detail: {
+      name: project.name,
+      shortName: project.shortName,
+    },
+  });
+  res.json({ ok: true, projectId: project.id });
 }));
 
 projectRouter.put("/:id/chat", requireRoles("ADMIN"), asyncRoute(async (req, res) => {

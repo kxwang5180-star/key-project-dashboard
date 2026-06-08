@@ -37,8 +37,11 @@ export const config = {
     tenantTokenUrl: "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
     chatsUrl: "https://open.feishu.cn/open-apis/im/v1/chats",
     chatMembersUrl: "https://open.feishu.cn/open-apis/im/v1/chats",
+    messagesUrl: "https://open.feishu.cn/open-apis/im/v1/messages",
     contactUsersUrl: "https://open.feishu.cn/open-apis/contact/v3/users",
     defaultChatId: process.env.FEISHU_CHAT_ID || "",
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
+    callbackVerificationToken: process.env.FEISHU_CALLBACK_VERIFICATION_TOKEN || "",
     postLoginRedirect: process.env.FEISHU_POST_LOGIN_REDIRECT || "/",
     allowAllUsers: String(process.env.FEISHU_ALLOW_ALL_USERS || "true").toLowerCase() === "true",
     scopes: String(process.env.FEISHU_SCOPES || "contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read")

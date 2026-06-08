@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   buildJsonApiCheck,
   DEFAULT_API_PATHS,
+  checkFeishuCallbackConfig,
   checkFeishuRedirectUri,
+  checkFeishuReminderScopes,
   checkFeishuScopes,
   checkFeishuAccessPolicy,
   checkDependencyLockfile,
@@ -59,6 +61,44 @@ test("checkFeishuScopes requires login and chat sync permissions", () => {
   assert.equal(check.ok, false);
   assert.deepEqual(check.missing, ["im:chat.members:read"]);
   assert.match(check.message, /缺少飞书权限/);
+});
+
+test("checkFeishuReminderScopes only requires message permission when reminders are enabled", () => {
+  assert.equal(
+    checkFeishuReminderScopes({
+      FEISHU_MILESTONE_REMINDERS_ENABLED: "false",
+      FEISHU_SCOPES: "contact:user.base:readonly",
+    }).ok,
+    true
+  );
+  assert.equal(
+    checkFeishuReminderScopes({
+      FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
+      FEISHU_SCOPES: "contact:user.base:readonly im:message:send_as_bot",
+    }).ok,
+    true
+  );
+  const check = checkFeishuReminderScopes({
+    FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
+    FEISHU_SCOPES: "contact:user.base:readonly",
+  });
+  assert.equal(check.ok, false);
+  assert.match(check.message, /im:message/);
+});
+
+test("checkFeishuCallbackConfig requires callback settings only when reminders are enabled", () => {
+  assert.equal(checkFeishuCallbackConfig({ FEISHU_MILESTONE_REMINDERS_ENABLED: "false" }).ok, true);
+  const missing = checkFeishuCallbackConfig({ FEISHU_MILESTONE_REMINDERS_ENABLED: "true" });
+  assert.equal(missing.ok, false);
+  assert.deepEqual(missing.missing, ["PUBLIC_BASE_URL", "FEISHU_CALLBACK_VERIFICATION_TOKEN"]);
+
+  const check = checkFeishuCallbackConfig({
+    FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
+    PUBLIC_BASE_URL: "https://example.com/",
+    FEISHU_CALLBACK_VERIFICATION_TOKEN: "verify-token",
+  });
+  assert.equal(check.ok, true);
+  assert.equal(check.callbackUrl, "https://example.com/api/feishu/callback");
 });
 
 test("checkFeishuAccessPolicy rejects unrestricted Feishu login without an allowlist", () => {

@@ -19,6 +19,27 @@ export function buildProjectBriefUpdatePayload(brief) {
   };
 }
 
+export function buildProjectCreateData(input = {}, options = {}) {
+  const name = String(input.name || "").trim();
+  const shortName = String(input.shortName || "").trim() || name.replace(/^【|】项目$/g, "").trim() || "新项目";
+  const businessLine = String(input.businessLine || "").trim() || "未填业务线";
+  return {
+    id: String(options.id || input.id || "").trim(),
+    name: name || `【${shortName}】项目`,
+    shortName,
+    businessLine,
+    ownerName: String(input.ownerName || input.owner || "").trim() || null,
+    description: String(input.description || "").trim(),
+    metricsSummary: String(input.metricsSummary || "").trim(),
+    keyNodesSummary: String(input.keyNodesSummary || "").trim(),
+    futurePlan: String(input.futurePlan || "").trim(),
+    teamSummary: String(input.teamSummary || "").trim(),
+    established: input.established === undefined ? true : Boolean(input.established),
+    isKeyProject: input.isKeyProject === undefined ? true : Boolean(input.isKeyProject),
+    stage: input.stage || "PLANNED",
+  };
+}
+
 export function applyProjectBriefSnapshot(project, brief) {
   if (!project || !brief) return project;
   project.owner = String(brief.owner || "").trim() || project.owner || "未填写";

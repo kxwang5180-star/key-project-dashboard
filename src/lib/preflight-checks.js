@@ -26,6 +26,12 @@ export const REQUIRED_FEISHU_SCOPES = [
   "im:chat.members:read",
 ];
 
+export const FEISHU_MESSAGE_SEND_SCOPES = [
+  "im:message",
+  "im:message:send_as_bot",
+  "im:message:send",
+];
+
 export function checkRequiredEnv(env, keys = REQUIRED_DEPLOY_ENV_KEYS) {
   const missing = keys.filter((key) => !String(env[key] || "").trim());
   return {
@@ -91,6 +97,48 @@ export function checkFeishuScopes(value, requiredScopes = REQUIRED_FEISHU_SCOPES
     message: missing.length
       ? `缺少飞书权限：${missing.join(", ")}`
       : "飞书登录和群聊同步权限已覆盖",
+  };
+}
+
+export function checkFeishuReminderScopes(env = {}) {
+  const enabled = String(env.FEISHU_MILESTONE_REMINDERS_ENABLED || "false").trim().toLowerCase() === "true";
+  const scopes = String(env.FEISHU_SCOPES || "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const hasSendScope = FEISHU_MESSAGE_SEND_SCOPES.some((scope) => scopes.includes(scope));
+  const ok = !enabled || hasSendScope;
+  return {
+    name: "feishu-reminder-scopes",
+    ok,
+    enabled,
+    scopes,
+    message: ok
+      ? enabled
+        ? "里程碑群提醒发送权限已覆盖"
+        : "里程碑群提醒未启用，已跳过消息发送权限检查"
+      : `启用里程碑群提醒时，FEISHU_SCOPES 需包含以下任一权限：${FEISHU_MESSAGE_SEND_SCOPES.join(", ")}`,
+  };
+}
+
+export function checkFeishuCallbackConfig(env = {}) {
+  const enabled = String(env.FEISHU_MILESTONE_REMINDERS_ENABLED || "false").trim().toLowerCase() === "true";
+  const publicBaseUrl = String(env.PUBLIC_BASE_URL || "").trim();
+  const verificationToken = String(env.FEISHU_CALLBACK_VERIFICATION_TOKEN || "").trim();
+  const missing = [];
+  if (enabled && !publicBaseUrl) missing.push("PUBLIC_BASE_URL");
+  if (enabled && !verificationToken) missing.push("FEISHU_CALLBACK_VERIFICATION_TOKEN");
+  return {
+    name: "feishu-callback-config",
+    ok: missing.length === 0,
+    enabled,
+    missing,
+    callbackUrl: publicBaseUrl ? new URL("/api/feishu/callback", publicBaseUrl).toString() : "",
+    message: missing.length
+      ? `启用里程碑群提醒时，需补充回调配置：${missing.join(", ")}`
+      : enabled
+        ? "飞书卡片回调配置已覆盖"
+        : "里程碑群提醒未启用，已跳过卡片回调配置检查",
   };
 }
 

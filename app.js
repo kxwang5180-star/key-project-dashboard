@@ -77,6 +77,11 @@ const state = {
   chatSearchComposing: false,
   expandedProjectGroups: {},
   expandedChatMembers: {},
+  projectCreateDraft: {
+    name: "",
+    shortName: "",
+    businessLine: "",
+  },
   userEditModalOpen: false,
   userEditTargetId: null,
 };
@@ -455,6 +460,19 @@ async function saveProjectChatBinding(projectId, chatId) {
   return apiRequest(`/api/projects/${projectId}/chat`, {
     method: "PUT",
     body: JSON.stringify({ chatId }),
+  });
+}
+
+async function createProjectRecord(draft) {
+  return apiRequest("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(draft),
+  });
+}
+
+async function deleteProjectRecord(projectId) {
+  return apiRequest(`/api/projects/${projectId}`, {
+    method: "DELETE",
   });
 }
 
@@ -2318,6 +2336,12 @@ function renderAuthCenter() {
       </div>
       <span>同步群聊后选择项目群，再同步成员。</span>
     </div>
+    <div class="project-create-strip">
+      <input data-project-create-field="name" value="${escapeHtml(state.projectCreateDraft.name)}" placeholder="项目名称，如【飞书机器人测试】项目" />
+      <input data-project-create-field="shortName" value="${escapeHtml(state.projectCreateDraft.shortName)}" placeholder="简称" />
+      <input data-project-create-field="businessLine" value="${escapeHtml(state.projectCreateDraft.businessLine)}" placeholder="业务线" />
+      <button class="primary-action compact-action" type="button" data-create-project>新增项目</button>
+    </div>
     <div class="role-binding-list chat-binding-grid">
       ${projects
         .map((project) => {
@@ -2351,6 +2375,7 @@ function renderAuthCenter() {
               <div class="binding-actions">
                 <button class="secondary-action compact-action" type="button" data-open-chat-picker="${project.id}">选择群聊</button>
                 <button class="secondary-action compact-action" type="button" data-sync-project-chat="${project.id}"${actionAttrs(syncProjectChatKey)}>${isSyncingProjectChat ? "同步中..." : "同步成员"}</button>
+                <button class="ghost-danger compact-action" type="button" data-delete-project="${project.id}">删除</button>
               </div>
             </article>
           `;
@@ -2667,6 +2692,29 @@ function renderMetricTargetStack({ label, value }) {
   `;
 }
 
+function getMetricCardClass({ toneClass, statusClass, expanded, hasSide }) {
+  return `metric-visual-card ${toneClass} ${statusClass} ${hasSide ? "has-side" : "is-full"} ${expanded ? "is-expanded" : ""}`;
+}
+
+function renderMetricVisualCopy({ metric, index, label, statusBadge, isFull }) {
+  const metricName = escapeHtml(metric.name || `指标 ${index + 1}`);
+  const meta = `<span>${statusBadge}${escapeHtml(label)}</span>`;
+  if (isFull) {
+    return `
+      <div class="metric-visual-copy is-full-copy">
+        <strong>${metricName}</strong>
+        ${meta}
+      </div>
+    `;
+  }
+  return `
+    <div class="metric-visual-copy">
+      ${meta}
+      <strong>${metricName}</strong>
+    </div>
+  `;
+}
+
 function renderMetricVisual(metric, index, project) {
   const status = getMetricTargetStatus(metric);
   const progress = getMetricProgress(metric);
@@ -2682,13 +2730,12 @@ function renderMetricVisual(metric, index, project) {
   const statusBadge = `<span class="metric-status-badge ${statusClass}">${escapeHtml(status.label)}</span>`;
 
   if (hasTargetOnly) {
+    const side = renderMetricTargetStack({ label: "目标", value: metric.target || "待填目标" });
+    const hasSide = Boolean(side);
     return `
-      <article class="metric-visual-card ${toneClass} ${statusClass} is-target-only ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-        <div class="metric-visual-copy">
-          <span>${statusBadge}${escapeHtml(label)}</span>
-          <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-        </div>
-        ${renderMetricTargetStack({ label: "目标", value: metric.target || "待填目标" })}
+      <article class="${getMetricCardClass({ toneClass: `${toneClass} is-target-only`, statusClass, expanded, hasSide })}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
+        ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: !hasSide })}
+        ${side}
         ${renderMetricDetail(metric, expanded)}
       </article>
     `;
@@ -2697,10 +2744,7 @@ function renderMetricVisual(metric, index, project) {
   if (progress !== null) {
     return `
       <article class="metric-visual-card ${toneClass} ${statusClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}; --chart-angle: ${progress * 3.6}deg" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-        <div class="metric-visual-copy">
-          <span>${statusBadge}${escapeHtml(label)}</span>
-          <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-        </div>
+        ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: false })}
         <div class="metric-hero-visual">
           <div class="metric-ring metric-ring-large metric-pie"><span>${progress}%</span></div>
           <small>${escapeHtml(status.label)}</small>
@@ -2710,13 +2754,12 @@ function renderMetricVisual(metric, index, project) {
     `;
   }
 
+  const side = renderMetricTargetStack({ label: hasTarget ? "当前/目标" : "当前", value: metric.current || metric.target });
+  const hasSide = Boolean(side);
   return `
-    <article class="metric-visual-card ${toneClass} ${statusClass} ${expanded ? "is-expanded" : ""}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
-      <div class="metric-visual-copy">
-        <span>${statusBadge}${escapeHtml(label)}</span>
-        <strong>${escapeHtml(metric.name || `指标 ${index + 1}`)}</strong>
-      </div>
-      ${renderMetricTargetStack({ label: hasTarget ? "当前/目标" : "当前", value: metric.current || metric.target })}
+    <article class="${getMetricCardClass({ toneClass, statusClass, expanded, hasSide })}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
+      ${renderMetricVisualCopy({ metric, index, label, statusBadge, isFull: !hasSide })}
+      ${side}
       ${renderMetricDetail(metric, expanded)}
     </article>
   `;
@@ -3492,6 +3535,61 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const createProjectButton = event.target.closest("[data-create-project]");
+  if (createProjectButton) {
+    const draft = state.projectCreateDraft;
+    if (!String(draft.name || draft.shortName || "").trim()) {
+      authState.bindingError = "请先填写项目名称。";
+      renderAuthCenter();
+      return;
+    }
+    const actionKey = buildActionKey("create-project");
+    if (!beginAction(actionKey)) return;
+    createProjectButton.disabled = true;
+    createProjectRecord(draft)
+      .then(() => loadBootstrapData())
+      .then(() => loadRoleBindings())
+      .then(() => {
+        state.projectCreateDraft = { name: "", shortName: "", businessLine: "" };
+        authState.bindingError = "项目已新增，可继续绑定群聊并同步成员。";
+        render();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        renderAuthCenter();
+      })
+      .finally(() => {
+        finishAction(actionKey);
+      });
+    return;
+  }
+
+  const deleteProjectButton = event.target.closest("[data-delete-project]");
+  if (deleteProjectButton) {
+    const projectId = deleteProjectButton.dataset.deleteProject;
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+    if (!confirm(`确认删除项目「${project.shortName}」？该操作会同步删除该项目的群成员绑定、里程碑、指标和填报记录。`)) return;
+    const actionKey = buildActionKey("delete-project", projectId);
+    if (!beginAction(actionKey)) return;
+    deleteProjectRecord(projectId)
+      .then(() => loadBootstrapData())
+      .then(() => loadRoleBindings())
+      .then(() => {
+        resetAllDrafts();
+        authState.bindingError = "项目已删除，相关列表已刷新。";
+        render();
+      })
+      .catch((error) => {
+        authState.bindingError = error.message;
+        renderAuthCenter();
+      })
+      .finally(() => {
+        finishAction(actionKey);
+      });
+    return;
+  }
+
   const saveProjectChatButton = event.target.closest("[data-save-project-chat]");
   if (saveProjectChatButton) {
     const projectId = saveProjectChatButton.dataset.saveProjectChat;
@@ -4146,6 +4244,16 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  const projectCreateField = event.target.closest("[data-project-create-field]");
+  if (projectCreateField) {
+    const field = projectCreateField.dataset.projectCreateField;
+    state.projectCreateDraft = {
+      ...state.projectCreateDraft,
+      [field]: projectCreateField.value,
+    };
+    return;
+  }
+
   if (event.target.id === "chatPickerSearch") {
     if (state.chatSearchComposing) return;
     state.chatSearch = event.target.value;

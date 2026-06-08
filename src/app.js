@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { authRouter } from "./routes/auth.js";
 import { bootstrapRouter } from "./routes/bootstrap.js";
+import { feishuCallbackRouter } from "./routes/feishu-callbacks.js";
 import { governanceRouter } from "./routes/governance.js";
 import { healthRouter } from "./routes/health.js";
 import { projectRouter } from "./routes/projects.js";
@@ -30,6 +31,7 @@ export function createApp() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/feishu/callback", feishuCallbackRouter);
   app.use("/api/bootstrap", bootstrapRouter);
   app.use("/api/projects", projectRouter);
   app.use("/api/reports", reportRouter);

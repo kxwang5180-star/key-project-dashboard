@@ -1,0 +1,156 @@
+{
+  "schema": "2.0",
+  "config": {
+    "update_multi": true,
+    "style": {
+      "text_size": {
+        "normal_v2": {
+          "default": "normal",
+          "pc": "normal",
+          "mobile": "heading"
+        }
+      }
+    }
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "重点项目里程碑提醒"
+    },
+    "subtitle": {
+      "tag": "plain_text",
+      "content": "${milestone_count} 个节点需要关注"
+    },
+    "template": "orange",
+    "padding": "12px 12px 12px 12px"
+  },
+  "body": {
+    "direction": "vertical",
+    "padding": "12px 12px 12px 12px",
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "请关注以下重点项目里程碑，并在项目维护页及时更新节点进展。",
+        "text_align": "left",
+        "text_size": "normal_v2",
+        "margin": "0px 0px 8px 0px"
+      },
+      {
+        "tag": "markdown",
+        "content": "**${timing_label}**",
+        "text_align": "left",
+        "text_size": "normal_v2",
+        "margin": "8px 0px 0px 0px"
+      },
+      {
+        "tag": "column_set",
+        "background_style": "grey-100",
+        "horizontal_spacing": "8px",
+        "columns": [
+          {
+            "tag": "column",
+            "width": "weighted",
+            "elements": [
+              {
+                "tag": "markdown",
+                "content": "**${project_name}**",
+                "text_align": "left",
+                "text_size": "normal_v2",
+                "margin": "0px 0px 4px 0px"
+              },
+              {
+                "tag": "markdown",
+                "content": "${milestone_title}",
+                "text_align": "left",
+                "text_size": "normal_v2",
+                "margin": "0px 0px 0px 0px"
+              },
+              {
+                "tag": "markdown",
+                "content": "${due_date}｜业务线：${business_line}",
+                "text_align": "left",
+                "text_size": "notation",
+                "margin": "0px 0px 0px 0px"
+              }
+            ],
+            "padding": "8px 8px 8px 8px",
+            "vertical_spacing": "4px",
+            "vertical_align": "top"
+          }
+        ],
+        "margin": "6px 0px 0px 0px"
+      },
+      {
+        "tag": "column_set",
+        "flex_mode": "flow",
+        "background_style": "default",
+        "horizontal_spacing": "8px",
+        "columns": [
+          {
+            "tag": "column",
+            "width": "auto",
+            "elements": [
+              {
+                "tag": "button",
+                "type": "primary",
+                "size": "small",
+                "text": {
+                  "tag": "plain_text",
+                  "content": "打开维护页"
+                },
+                "behaviors": [
+                  {
+                    "type": "open_url",
+                    "default_url": "${project_url}",
+                    "pc_url": "${project_url}",
+                    "android_url": "${project_url}",
+                    "ios_url": "${project_url}"
+                  }
+                ]
+              }
+            ],
+            "padding": "0px 0px 0px 0px",
+            "vertical_align": "top"
+          },
+          {
+            "tag": "column",
+            "width": "auto",
+            "elements": [
+              {
+                "tag": "button",
+                "type": "default",
+                "size": "small",
+                "text": {
+                  "tag": "plain_text",
+                  "content": "我已知晓"
+                },
+                "behaviors": [
+                  {
+                    "type": "callback",
+                    "value": {
+                      "action": "milestone_reminder_ack",
+                      "source": "milestone_reminder_card",
+                      "chatId": "${chat_id}",
+                      "projectIds": [
+                        "${project_id}"
+                      ],
+                      "milestoneIds": [
+                        "${milestone_id}"
+                      ],
+                      "dueDates": [
+                        "${due_date}"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "padding": "0px 0px 0px 0px",
+            "vertical_align": "top"
+          }
+        ],
+        "margin": "12px 0px 0px 0px"
+      }
+    ]
+  }
+}

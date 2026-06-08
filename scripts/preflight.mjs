@@ -5,7 +5,9 @@ import {
   DEFAULT_API_PATHS,
   checkDependencyLockfile,
   checkFeishuAccessPolicy,
+  checkFeishuCallbackConfig,
   checkFeishuRedirectUri,
+  checkFeishuReminderScopes,
   checkFeishuScopes,
   checkRuntimeDependencies,
   checkRequiredEnv,
@@ -89,6 +91,8 @@ async function main() {
     checkUrl("PREFLIGHT_BASE_URL", args.baseUrl),
     checkFeishuRedirectUri(process.env.FEISHU_REDIRECT_URI),
     checkFeishuScopes(process.env.FEISHU_SCOPES),
+    checkFeishuReminderScopes(process.env),
+    checkFeishuCallbackConfig(process.env),
     checkFeishuAccessPolicy(process.env),
   ];
 
