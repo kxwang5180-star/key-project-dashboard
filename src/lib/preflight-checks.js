@@ -128,17 +128,24 @@ export function checkFeishuCallbackConfig(env = {}) {
   const missing = [];
   if (enabled && !publicBaseUrl) missing.push("PUBLIC_BASE_URL");
   if (enabled && !verificationToken) missing.push("FEISHU_CALLBACK_VERIFICATION_TOKEN");
+  const publicBaseCheck = publicBaseUrl ? checkUrl("PUBLIC_BASE_URL", publicBaseUrl) : { ok: !enabled };
+  const isFeishuHostedCallback = /(^|\.)feishu\.cn$/i.test(publicBaseUrl ? new URL(publicBaseUrl).hostname : "");
+  const ok = missing.length === 0 && publicBaseCheck.ok && (!enabled || !isFeishuHostedCallback);
+  let message = enabled ? "飞书卡片回调配置已覆盖" : "里程碑群提醒未启用，已跳过卡片回调配置检查";
+  if (missing.length) {
+    message = `启用里程碑群提醒时，需补充回调配置：${missing.join(", ")}`;
+  } else if (!publicBaseCheck.ok) {
+    message = "PUBLIC_BASE_URL 必须是本系统可访问的 http/https 地址";
+  } else if (isFeishuHostedCallback) {
+    message = "PUBLIC_BASE_URL 不能填写飞书 card action 地址，应填写本系统访问地址，例如 http://172.20.180.157/";
+  }
   return {
     name: "feishu-callback-config",
-    ok: missing.length === 0,
+    ok,
     enabled,
     missing,
-    callbackUrl: publicBaseUrl ? new URL("/api/feishu/callback", publicBaseUrl).toString() : "",
-    message: missing.length
-      ? `启用里程碑群提醒时，需补充回调配置：${missing.join(", ")}`
-      : enabled
-        ? "飞书卡片回调配置已覆盖"
-        : "里程碑群提醒未启用，已跳过卡片回调配置检查",
+    callbackUrl: publicBaseUrl && publicBaseCheck.ok ? new URL("/api/feishu/callback", publicBaseUrl).toString() : "",
+    message,
   };
 }
 

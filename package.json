@@ -16,7 +16,8 @@
     "feishu:chat-members": "node scripts/fetch-feishu-chat-members.mjs",
     "feishu:milestone-reminders": "node scripts/send-milestone-reminders.mjs",
     "feishu:milestone-reminders:send": "node scripts/send-milestone-reminders.mjs --send",
-    "feishu:test-card": "node scripts/test-feishu-milestone-card.mjs"
+    "feishu:test-card": "node scripts/test-feishu-milestone-card.mjs",
+    "check:project-create-api": "node scripts/check-project-create-api.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

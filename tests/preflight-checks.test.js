@@ -101,6 +101,16 @@ test("checkFeishuCallbackConfig requires callback settings only when reminders a
   assert.equal(check.callbackUrl, "https://example.com/api/feishu/callback");
 });
 
+test("checkFeishuCallbackConfig rejects Feishu card action urls as public base url", () => {
+  const check = checkFeishuCallbackConfig({
+    FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
+    PUBLIC_BASE_URL: "https://aily.feishu.cn/anyclaw/webhook/feishu/cli_xxx/card/action",
+    FEISHU_CALLBACK_VERIFICATION_TOKEN: "verify-token",
+  });
+  assert.equal(check.ok, false);
+  assert.match(check.message, /本系统访问地址/);
+});
+
 test("checkFeishuAccessPolicy rejects unrestricted Feishu login without an allowlist", () => {
   const check = checkFeishuAccessPolicy({
     FEISHU_ALLOW_ALL_USERS: "true",
