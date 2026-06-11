@@ -35,6 +35,8 @@ import {
 } from "./src/ui/report-projects.js";
 import { buildActionKey, isActionPending, setActionPending } from "./src/ui/action-state.js";
 import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js";
+import { buildAuthPanelViewModel } from "./src/ui/auth-panel.js";
+import { buildDataHealthModel } from "./src/ui/data-health.js";
 import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
 import { getMetricTargetStatus } from "./src/ui/metric-status.js";
 import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
@@ -72,6 +74,7 @@ const state = {
   pendingMilestoneScrollId: null,
   saveNotice: "",
   reportSubmitting: false,
+  dataSource: "static",
   pendingActions: {},
   expandedCalendarDays: {},
   expandedMilestoneReports: {},
@@ -85,6 +88,7 @@ const state = {
   chatSearchComposing: false,
   expandedProjectGroups: {},
   expandedChatMembers: {},
+  identityManageOpen: false,
   projectCreateDraft: {
     name: "",
     shortName: "",
@@ -431,6 +435,7 @@ function pruneProjectScopedState() {
 }
 
 function applyBootstrapPayload(payload) {
+  state.dataSource = "server";
   const bootstrapRows = mergeBootstrapProjects(sourceRows, payload?.projects || [], { preferBootstrap: true });
   projects = buildProjects(bootstrapRows);
   applyProjectMaintenance();
@@ -1275,6 +1280,7 @@ function refreshMilestoneMaintenanceViews({ renderRail = true, syncFields = true
   renderGovernance();
   renderReportStatusPanel();
   renderSummary();
+  renderDataHealth();
 }
 
 function preserveScrollPosition(callback) {
@@ -1396,7 +1402,10 @@ function renderViewSwitch() {
     button.classList.toggle("is-hidden", Boolean(anonymousBlocked || hiddenForMember));
   });
   document.querySelectorAll(".view-button").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.view === state.currentView);
+    const isActive = button.dataset.view === state.currentView;
+    button.classList.toggle("is-active", isActive);
+    if (isActive) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
   document.querySelectorAll(".app-view").forEach((view) => {
     view.classList.toggle("is-active", view.id === `${state.currentView}View`);
@@ -1478,6 +1487,38 @@ function renderSummary() {
       `
     )
     .join("");
+}
+
+function renderDataHealth() {
+  const container = document.querySelector("#dataHealthStrip");
+  if (!container) return;
+  const model = buildDataHealthModel({
+    source: state.dataSource,
+    projects: getFilteredProjects(),
+    reports: submissions,
+    currentWeek: CURRENT_REPORT_WEEK,
+    getMetricItems: getProjectMetricItems,
+  });
+  container.innerHTML = `
+    <div class="data-health-score tone-${model.overallScore >= 80 ? "green" : model.overallScore >= 55 ? "amber" : "rose"}">
+      <span>数据联通</span>
+      <strong>${model.overallScore}</strong>
+      <small>${escapeHtml(model.sourceLabel)}</small>
+    </div>
+    <div class="data-health-cards">
+      ${model.cards
+        .map(
+          (card) => `
+            <article class="data-health-card tone-${card.tone}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.detail)}</small>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function getDashboardAttentionItems() {
@@ -2267,6 +2308,84 @@ function renderMetricTrendDashboard(container, series) {
   `;
 }
 
+function renderMetricActionSummary(container, groups, total) {
+  if (!container) return;
+  container.innerHTML = groups.length
+    ? groups
+        .map((group) => {
+          const percent = total ? Math.round((group.count / total) * 100) : 0;
+          return `
+            <article class="metric-action-card is-status-${group.key}">
+              <div>
+                <span>${escapeHtml(group.label)}</span>
+                <strong>${group.count}</strong>
+              </div>
+              <small>${percent}%</small>
+            </article>
+          `;
+        })
+        .join("")
+    : '<div class="metric-empty-chart">暂无指标状态</div>';
+}
+
+function renderMetricInlineProgress(metric) {
+  if (metric.progress === null) return "";
+  return `
+    <div class="metric-inline-progress" aria-label="进度 ${metric.progress}%">
+      <span style="width:${metric.progress}%"></span>
+    </div>
+  `;
+}
+
+function renderMetricCatalogRecord(metric) {
+  const currentText = metric.current || "待填当前值";
+  const targetText = metric.target ? `目标 ${metric.target}` : "未设目标";
+  const progressText = metric.progress !== null ? `${metric.progress}%` : "定性跟踪";
+  return `
+    <article class="metric-catalog-row" style="--project-color: ${metric.color}">
+      <div class="metric-catalog-main">
+        <span class="metric-status-badge is-status-${metric.status.key}">${escapeHtml(metric.status.label)}</span>
+        <div>
+          <strong>${escapeHtml(metric.name)}</strong>
+          <small>${escapeHtml(metric.projectName)} · ${escapeHtml(metric.businessLine)}</small>
+        </div>
+      </div>
+      <div class="metric-catalog-value">
+        <b>${escapeHtml(currentText)}</b>
+        <span>${escapeHtml(targetText)}</span>
+      </div>
+      <div class="metric-catalog-progress">
+        ${renderMetricInlineProgress(metric)}
+        <span>${escapeHtml(progressText)}</span>
+      </div>
+      <p>${escapeHtml(compactText(metric.observation || "未维护计算口径", 76))}</p>
+    </article>
+  `;
+}
+
+function renderMetricAllGroups(container, groups) {
+  if (!container) return;
+  container.innerHTML = groups.length
+    ? groups
+        .map(
+          (group) => `
+            <section class="metric-business-group">
+              <header>
+                <div>
+                  <h3>${escapeHtml(group.label)}</h3>
+                  <span>${group.projectCount} 个项目 · ${group.metricCount} 项指标</span>
+                </div>
+              </header>
+              <div class="metric-catalog-list">
+                ${group.metrics.map(renderMetricCatalogRecord).join("")}
+              </div>
+            </section>
+          `
+        )
+        .join("")
+    : '<div class="metric-empty-chart">暂无项目指标</div>';
+}
+
 function renderMetricDashboard() {
   if (!document.querySelector("#metricDashboardSummary")) return;
   const model = buildMetricDashboardModel(projects, getProjectMetricItems);
@@ -2289,9 +2408,14 @@ function renderMetricDashboard() {
     )
     .join("");
 
-  renderMetricTrendDashboard(document.querySelector("#metricTrendChart"), model.trendSeries);
+  const catalogMeta = document.querySelector("#metricCatalogMeta");
+  if (catalogMeta) {
+    catalogMeta.textContent = `${model.metricGroups.length} 个业务线 · ${model.summary.metricCount} 项指标，组内优先显示需推进和待补项`;
+  }
+  renderMetricActionSummary(document.querySelector("#metricActionSummary"), model.actionGroups, model.summary.metricCount);
   renderMetricPie(document.querySelector("#metricStatusPie"), model.statusSlices, "暂无状态数据");
   renderMetricPie(document.querySelector("#metricBusinessPie"), model.businessLineSlices, "暂无业务线数据");
+  renderMetricAllGroups(document.querySelector("#metricAllGroups"), model.metricGroups);
 
   document.querySelector("#metricTopList").innerHTML = model.topMetrics.length
     ? model.topMetrics
@@ -2338,14 +2462,18 @@ function renderAuthCenter() {
   const registerHero = document.querySelector(".register-layout .member-hero");
   const registerLayout = document.querySelector(".register-layout");
   if (!authPanel || !roleBindingPanel || !roleBindingWrapper) return;
-  const hideLoginBox = Boolean(memberProfile);
-  loginWrapper?.classList.toggle("is-hidden", hideLoginBox);
-  registerHero?.classList.toggle("is-hidden", hideLoginBox);
-  registerLayout?.classList.toggle("is-managing-identity", Boolean(memberProfile?.canManageIdentity));
+  const authModel = buildAuthPanelViewModel({ user: memberProfile, projects });
+  loginWrapper?.classList.remove("is-hidden");
+  registerHero?.classList.add("is-hidden");
+  loginWrapper?.classList.toggle("is-login-only", !memberProfile);
+  registerLayout?.classList.toggle("is-login-only", !memberProfile);
+  registerLayout?.classList.toggle("is-managing-identity", Boolean(authModel.showIdentityManagement && state.identityManageOpen));
 
   if (authState.loading) {
     loginWrapper?.classList.remove("is-hidden");
-    registerHero?.classList.remove("is-hidden");
+    loginWrapper?.classList.add("is-login-only");
+    registerHero?.classList.add("is-hidden");
+    registerLayout?.classList.add("is-login-only");
     registerLayout?.classList.remove("is-managing-identity");
     authPanel.innerHTML = '<div class="empty-state">正在校验飞书登录状态...</div>';
     roleBindingWrapper.classList.add("is-hidden");
@@ -2354,13 +2482,15 @@ function renderAuthCenter() {
   }
 
   if (!memberProfile) {
+    state.identityManageOpen = false;
     authPanel.innerHTML = `
       <div class="auth-stack login-entry">
         <div class="auth-copy">
-          <strong>飞书登录</strong>
-          <p>仅读取基础身份，并按项目群成员关系开放维护权限。</p>
+          <strong>${escapeHtml(authModel.title)}</strong>
+          <p>${escapeHtml(authModel.subtitle)}</p>
         </div>
-        <button class="primary-action feishu-login-button" type="button" data-feishu-login>进入系统</button>
+        <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
+        <small class="login-note">${escapeHtml(authModel.notes[0] || "")}</small>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;
@@ -2383,21 +2513,25 @@ function renderAuthCenter() {
         <span class="phase-pill">${memberProfile.feishuLinked ? "飞书已绑定" : "未绑定"}</span>
       </div>
       <div class="identity-summary">
-        <span>默认项目：${escapeHtml(projects.find((project) => project.id === memberProfile.projectId)?.shortName || "未设置")}</span>
+        <span>默认项目：${escapeHtml(authModel.defaultProjectName)}</span>
       </div>
       <div class="auth-actions">
-        <button class="primary-action compact-action" type="button" data-view="calendar">进入里程碑日历</button>
-        ${
-          hasMaintainableProjects(memberProfile)
-            ? '<button class="secondary-action" type="button" data-view="report">项目维护</button>'
-            : ""
-        }
-        <button class="secondary-action" type="button" data-logout>退出登录</button>
+        ${authModel.actions
+          .map((action) => {
+            if (action.key === "logout") return `<button class="secondary-action" type="button" data-logout>${escapeHtml(action.label)}</button>`;
+            if (action.key === "identity") {
+              const label = state.identityManageOpen ? "收起身份管理" : action.label;
+              return `<button class="secondary-action" type="button" data-toggle-identity-management>${escapeHtml(label)}</button>`;
+            }
+            const className = action.tone === "primary" ? "primary-action compact-action" : "secondary-action";
+            return `<button class="${className}" type="button" data-view="${escapeHtml(action.key)}">${escapeHtml(action.label)}</button>`;
+          })
+          .join("")}
       </div>
     </div>
   `;
 
-  if (!memberProfile.canManageIdentity) {
+  if (!authModel.showIdentityManagement || !state.identityManageOpen) {
     roleBindingWrapper.classList.add("is-hidden");
     roleBindingPanel.innerHTML = "";
     return;
@@ -3562,6 +3696,7 @@ function render() {
   renderViewSwitch();
   renderBusinessLineFilter();
   renderSummary();
+  renderDataHealth();
   renderAttention();
   renderFilters();
   renderProjectList();
@@ -3623,6 +3758,7 @@ document.addEventListener("click", async (event) => {
       .catch(() => null)
       .finally(() => {
         memberProfile = null;
+        state.identityManageOpen = false;
         authState.users = [];
         authState.error = "";
         state.currentView = "register";
@@ -3649,6 +3785,13 @@ document.addEventListener("click", async (event) => {
         authState.usersRefreshing = false;
         renderAuthCenter();
       });
+    return;
+  }
+
+  const identityManagementButton = event.target.closest("[data-toggle-identity-management]");
+  if (identityManagementButton) {
+    state.identityManageOpen = !state.identityManageOpen;
+    renderAuthCenter();
     return;
   }
 
@@ -3921,6 +4064,7 @@ document.addEventListener("click", async (event) => {
   if (monthButton) {
     shiftCalendarMonth(Number(monthButton.dataset.monthShift));
     renderSummary();
+    renderDataHealth();
     renderAttention();
     renderCalendar();
     return;
@@ -4242,6 +4386,7 @@ document.addEventListener("click", async (event) => {
       renderDetail();
       renderReportStatusPanel();
       renderSummary();
+      renderDataHealth();
     } catch (error) {
       state.saveNotice = error.message;
       renderReportStatusPanel();
@@ -4394,6 +4539,7 @@ document.addEventListener("change", (event) => {
     state.risksExpanded = false;
     state.calendarProject = "all";
     renderSummary();
+    renderDataHealth();
     renderAttention();
     renderProjectList();
     renderCalendar();

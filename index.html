@@ -30,6 +30,7 @@
         <section class="app-view is-active" id="dashboardView">
           <section class="insight-board" id="insightBoard">
             <section class="summary-grid" id="summaryGrid" aria-label="项目总览"></section>
+            <section class="data-health-strip" id="dataHealthStrip" aria-label="数据联通状态"></section>
 
             <section class="attention-board" aria-label="本周关注事项">
               <div class="attention-head">
@@ -101,15 +102,15 @@
               <div id="metricDashboardSummary" class="metric-dashboard-summary"></div>
             </section>
 
-            <section class="metrics-dashboard-grid">
-              <section class="panel metric-chart-panel metric-trend-panel">
+            <section class="metrics-overview-grid">
+              <section class="panel metric-action-panel">
                 <div class="panel-header">
                   <div>
-                    <h2>指标趋势</h2>
-                    <p>来自项目维护中“记录本期”的历史值</p>
+                    <h2>指标状态</h2>
+                    <p>优先关注推进中、仅有目标和待补项</p>
                   </div>
                 </div>
-                <div id="metricTrendChart" class="metric-trend-chart"></div>
+                <div id="metricActionSummary" class="metric-action-summary"></div>
               </section>
 
               <section class="panel metric-chart-panel">
@@ -133,14 +134,26 @@
               </section>
             </section>
 
-            <section class="panel metric-ranking-panel">
-              <div class="panel-header">
-                <div>
-                  <h2>重点指标排行</h2>
-                  <p>优先展示已形成进度百分比的指标</p>
+            <section class="metric-catalog-layout">
+              <section class="panel metric-all-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>全部指标</h2>
+                    <p id="metricCatalogMeta">按业务线归类，组内按需关注程度排序</p>
+                  </div>
                 </div>
-              </div>
-              <div id="metricTopList" class="metric-top-list"></div>
+                <div id="metricAllGroups" class="metric-all-groups"></div>
+              </section>
+
+              <aside class="panel metric-ranking-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>达成排行</h2>
+                    <p>展示可计算百分比的指标</p>
+                  </div>
+                </div>
+                <div id="metricTopList" class="metric-top-list"></div>
+              </aside>
             </section>
           </section>
         </section>
@@ -148,16 +161,16 @@
         <section class="app-view" id="registerView">
           <section class="member-layout register-layout">
             <div class="member-hero">
-              <p class="eyebrow">飞书身份</p>
-              <h2>登录与权限</h2>
-              <p>进入后按身份和项目群成员关系开放对应页面。</p>
+              <p class="eyebrow">重点项目驾驶舱</p>
+              <h2>进入系统</h2>
+              <p>使用飞书身份登录，进入项目、里程碑和指标看板。</p>
             </div>
 
             <section class="panel member-card auth-card" id="memberRegisterPanel">
               <div class="panel-header">
                 <div>
-                  <h2>进入系统</h2>
-                  <p>系统将根据飞书身份识别角色</p>
+                  <h2>飞书登录</h2>
+                  <p>登录后按角色显示可访问入口</p>
                 </div>
               </div>
               <div id="authPanelContent" class="auth-panel-content"></div>

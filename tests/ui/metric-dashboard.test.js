@@ -75,3 +75,32 @@ test("buildMetricDashboardModel builds business line slices, top metrics, and tr
   });
   assert.equal(model.trendSeries.at(-1).value, 74);
 });
+
+test("buildMetricDashboardModel groups every metric by business line with actionable order", () => {
+  const model = buildMetricDashboardModel(projects, (project) => metricMap[project.id] || []);
+
+  assert.equal(model.metricGroups.reduce((sum, group) => sum + group.metrics.length, 0), 5);
+  assert.deepEqual(
+    model.metricGroups.map((group) => [group.label, group.metricCount, group.projectCount]),
+    [
+      ["财务人事", 2, 1],
+      ["门店提效", 2, 1],
+      ["协同办公", 1, 1],
+    ]
+  );
+  assert.deepEqual(
+    model.metricGroups[0].metrics.map((metric) => [metric.name, metric.status.key]),
+    [
+      ["Q2需求完成进度", "in-progress"],
+      ["问题完成进度", "achieved"],
+    ]
+  );
+  assert.deepEqual(
+    model.actionGroups.map((group) => [group.key, group.count]),
+    [
+      ["in-progress", 1],
+      ["goal", 1],
+      ["achieved", 3],
+    ]
+  );
+});

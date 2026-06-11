@@ -10,6 +10,12 @@ const STATUS_LABELS = {
 };
 
 const STATUS_ORDER = ["achieved", "in-progress", "tracking", "goal", "observing", "empty"];
+const ACTION_STATUS_ORDER = ["in-progress", "goal", "tracking", "observing", "empty", "achieved"];
+
+function getActionRank(record) {
+  const rank = ACTION_STATUS_ORDER.indexOf(record.status.key);
+  return rank === -1 ? ACTION_STATUS_ORDER.length : rank;
+}
 
 function toMetricRecord(project, metric, index) {
   const status = getMetricTargetStatus(metric);
@@ -70,6 +76,45 @@ function buildTrendSeries(records) {
   }));
 }
 
+function buildMetricGroups(records) {
+  const groups = new Map();
+  records.forEach((record) => {
+    if (!groups.has(record.businessLine)) {
+      groups.set(record.businessLine, {
+        label: record.businessLine,
+        metricCount: 0,
+        projectIds: new Set(),
+        metrics: [],
+      });
+    }
+    const group = groups.get(record.businessLine);
+    group.metricCount += 1;
+    group.projectIds.add(record.projectId);
+    group.metrics.push(record);
+  });
+
+  return [...groups.values()]
+    .map((group) => ({
+      label: group.label,
+      metricCount: group.metricCount,
+      projectCount: group.projectIds.size,
+      metrics: group.metrics.sort(
+        (a, b) => getActionRank(a) - getActionRank(b) || a.projectName.localeCompare(b.projectName, "zh-CN") || a.name.localeCompare(b.name, "zh-CN")
+      ),
+    }))
+    .sort((a, b) => b.metricCount - a.metricCount || a.label.localeCompare(b.label, "zh-CN"));
+}
+
+function buildActionGroups(records) {
+  return ACTION_STATUS_ORDER
+    .map((key) => ({
+      key,
+      label: STATUS_LABELS[key],
+      count: records.filter((record) => record.status.key === key).length,
+    }))
+    .filter((group) => group.count > 0);
+}
+
 export function buildMetricDashboardModel(projects, getMetricItems) {
   const records = projects.flatMap((project) =>
     getMetricItems(project).map((metric, index) => toMetricRecord(project, metric, index))
@@ -100,5 +145,7 @@ export function buildMetricDashboardModel(projects, getMetricItems) {
       .sort((a, b) => b.progress - a.progress || (b.currentNumber || 0) - (a.currentNumber || 0) || a.name.localeCompare(b.name, "zh-CN"))
       .slice(0, 8),
     trendSeries: buildTrendSeries(records).slice(-12),
+    metricGroups: buildMetricGroups(records),
+    actionGroups: buildActionGroups(records),
   };
 }
