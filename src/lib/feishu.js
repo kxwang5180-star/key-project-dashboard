@@ -226,6 +226,26 @@ export async function sendFeishuCardMessage({ receiveId, card, tenantAccessToken
   return data.data || {};
 }
 
+export async function updateFeishuCardMessage({ messageId, card, tenantAccessToken }) {
+  const target = String(messageId || "").trim();
+  if (!target) throw new Error("Missing Feishu message_id");
+  if (!card || typeof card !== "object") throw new Error("Missing Feishu card content");
+
+  const url = new URL(`${config.feishu.messagesUrl}/${encodeURIComponent(target)}`);
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${tenantAccessToken}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({
+      content: JSON.stringify(card),
+    }),
+  });
+  const data = await parseFeishuResponse(response, "Failed to update Feishu card message");
+  return data.data || {};
+}
+
 export async function fetchFeishuChatMemberNames(chatId, options = {}) {
   if (!chatId) throw new Error("Missing Feishu chat_id");
   const tenantAccessToken = await fetchTenantAccessToken();

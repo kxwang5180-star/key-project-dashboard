@@ -85,6 +85,7 @@ test("resolveAllowedProjectView limits non-project members to the calendar", () 
   const user = { isAdmin: false, projectIds: [] };
 
   assert.equal(resolveAllowedProjectView("dashboard", user), "calendar");
+  assert.equal(resolveAllowedProjectView("metrics", user), "metrics");
   assert.equal(resolveAllowedProjectView("report", user), "calendar");
   assert.equal(resolveAllowedProjectView("governance", user), "calendar");
   assert.equal(resolveAllowedProjectView("calendar", user), "calendar");
@@ -96,6 +97,7 @@ test("resolveAllowedProjectView lets project members maintain projects but not o
 
   assert.equal(resolveAllowedProjectView("report", user), "report");
   assert.equal(resolveAllowedProjectView("calendar", user), "calendar");
+  assert.equal(resolveAllowedProjectView("metrics", user), "metrics");
   assert.equal(resolveAllowedProjectView("register", user), "register");
   assert.equal(resolveAllowedProjectView("dashboard", user), "calendar");
   assert.equal(resolveAllowedProjectView("governance", user), "calendar");

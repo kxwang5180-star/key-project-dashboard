@@ -23,6 +23,7 @@ test("buildMilestoneReminderCard renders Feishu JSON 2.0 interactive card", () =
 
   assert.equal(card.schema, "2.0");
   assert.equal(card.config.update_multi, true);
+  assert.equal(card.config.callback, true);
   assert.equal(card.header.title.content, "重点项目里程碑提醒");
   assert.equal(JSON.stringify(card).includes("合同系统"), true);
   assert.equal(JSON.stringify(card).includes("完成第四批5个用户使用体验优化"), true);
@@ -48,13 +49,33 @@ test("buildMilestoneReminderCard includes open url and callback button behaviors
 
   assert.equal(actionSet.tag, "column_set");
   assert.equal(row.columns.length, 1);
-  assert.equal(buttons.length, 1);
-  assert.equal(buttons[0].text.content, "去维护");
+  assert.equal(buttons.length, 2);
+  assert.equal(buttons[0].text.content, "确认完成");
   assert.equal(buttons[0].size, "medium");
-  assert.equal(buttons[0].behaviors[0].type, "open_url");
-  assert.equal(buttons[0].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
+  assert.equal(buttons[0].behaviors[0].type, "callback");
+  assert.equal(buttons[0].behaviors[0].value.action, "milestone_reminder_mark_done");
+  assert.deepEqual(buttons[0].behaviors[0].value.milestoneIds, ["m1"]);
+  assert.equal(buttons[1].text.content, "去维护");
+  assert.equal(buttons[1].size, "medium");
+  assert.equal(buttons[1].behaviors[0].type, "open_url");
+  assert.equal(buttons[1].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
   assert.equal(JSON.stringify(card).includes("我已知晓"), false);
   assert.equal(JSON.stringify(card).includes("milestone_reminder_ack"), false);
+});
+
+test("buildMilestoneReminderCard renders completed callback state", () => {
+  const card = buildMilestoneReminderCard([target], {
+    baseUrl: "http://172.20.180.157/#report",
+    completedMilestoneIds: ["m1"],
+  });
+  const actionSet = card.body.elements.at(-1);
+  const buttons = actionSet.columns.flatMap((column) => column.elements);
+
+  assert.equal(card.header.template, "green");
+  assert.equal(JSON.stringify(card).includes("状态：已完成 ✅"), true);
+  assert.equal(buttons[0].text.content, "已完成 ✅");
+  assert.equal(buttons[0].disabled, true);
+  assert.equal(buttons[0].behaviors, undefined);
 });
 
 test("buildMilestoneReminderCards splits targets into multiple cards", () => {

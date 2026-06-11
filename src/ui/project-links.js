@@ -18,6 +18,7 @@ export function parseProjectMaintenanceHash(hash = "") {
 export function resolveInitialProjectViewFromHash(hash = "", fallbackView = "calendar") {
   const value = String(hash || "").trim().replace(/^#/, "");
   if (value === "calendar") return "calendar";
+  if (value === "metrics") return "metrics";
   if (value === "register") return "register";
   if (value === "report" || value === "member") return "report";
   if (value === "governance" || value === "pmo") return "governance";

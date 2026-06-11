@@ -45,15 +45,17 @@ function openUrlBehavior(url) {
   };
 }
 
-function button({ text, type = "default", behaviors, elementId }) {
-  return {
+function button({ text, type = "default", behaviors, elementId, disabled = false }) {
+  const actionButton = {
     tag: "button",
     element_id: elementId || "btn_open",
     type,
     size: "medium",
     text: plainText(text),
-    behaviors,
   };
+  if (behaviors?.length) actionButton.behaviors = behaviors;
+  if (disabled) actionButton.disabled = true;
+  return actionButton;
 }
 
 function buttonColumn(actionButton, options = {}) {
@@ -70,6 +72,7 @@ function buttonColumn(actionButton, options = {}) {
 function buildMilestoneRow(target, index = 0) {
   const projectInfo = [
     target.businessLine ? `业务线：${target.businessLine}` : "",
+    target.completed ? "状态：已完成 ✅" : "",
   ].filter(Boolean);
   const columns = [
     {
@@ -106,12 +109,17 @@ function groupTargetsByTiming(targets) {
 }
 
 export function buildMilestoneReminderCard(targets = [], options = {}) {
-  const items = Array.isArray(targets) ? targets.slice(0, CARD_MAX_TARGETS) : [];
+  const completedMilestoneIds = new Set((options.completedMilestoneIds || []).map((item) => String(item || "").trim()).filter(Boolean));
+  const items = (Array.isArray(targets) ? targets.slice(0, CARD_MAX_TARGETS) : []).map((target) => ({
+    ...target,
+    completed: Boolean(target?.completed || completedMilestoneIds.has(String(target?.milestoneId || "").trim())),
+  }));
   const hiddenCount = Math.max(0, (Array.isArray(targets) ? targets.length : 0) - items.length);
   const baseUrl = options.baseUrl || "";
   const title = options.title || "重点项目里程碑提醒";
   const subtitle = options.subtitle || `${items.length} 个节点需要关注`;
-  const template = options.template || "orange";
+  const allCompleted = Boolean(items.length && items.every((item) => item.completed));
+  const template = options.template || (allCompleted ? "green" : "orange");
   const firstTarget = items[0] || {};
   const projectUrl = buildProjectUrl(baseUrl, firstTarget.projectId);
 
@@ -129,14 +137,34 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     elements.push(markdown(`另有 ${hiddenCount} 个里程碑未在本卡片中展开，请进入项目看板查看。`, { elementId: "md_hidden", margin: "8px 0px 0px 0px" }));
   }
 
-  const actions = projectUrl
-    ? [button({
+  const markDoneValue = {
+    action: "milestone_reminder_mark_done",
+    baseUrl,
+    title,
+    subtitle,
+    template: "green",
+    projectIds: [...new Set(items.map((item) => item.projectId).filter(Boolean))],
+    milestoneIds: items.map((item) => item.milestoneId).filter(Boolean),
+    targets: items,
+  };
+  const actions = [];
+  if (items.length) {
+    actions.push(button({
+      text: allCompleted ? "已完成 ✅" : "确认完成",
+      type: allCompleted ? "default" : "primary",
+      behaviors: allCompleted ? [] : [{ type: "callback", value: markDoneValue }],
+      disabled: allCompleted,
+      elementId: "btn_done",
+    }));
+  }
+  if (projectUrl) {
+    actions.push(button({
         text: "去维护",
-        type: "primary",
+        type: "default",
         behaviors: [openUrlBehavior(projectUrl)],
         elementId: "btn_open",
-      })]
-    : [];
+      }));
+  }
 
   elements.push({
     tag: "column_set",
@@ -144,7 +172,7 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     flex_mode: "flow",
     background_style: "default",
     horizontal_spacing: "8px",
-    columns: actions.map((actionButton) => buttonColumn(actionButton)),
+    columns: actions.map((actionButton, index) => buttonColumn(actionButton, { elementId: `col_act_${index}` })),
     margin: "12px 0px 0px 0px",
   });
 
@@ -152,6 +180,7 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     schema: "2.0",
     config: {
       update_multi: true,
+      callback: true,
       style: {
         text_size: {
           normal_v2: {
@@ -198,7 +227,7 @@ export function buildProjectScopedMilestoneReminderCards(targets = [], options =
 
 export function buildMilestoneReminderCallbackResponse(value = {}) {
   const action = String(value?.action || "").trim();
-  if (action !== "milestone_reminder_ack") {
+  if (action !== "milestone_reminder_mark_done") {
     return {
       toast: {
         type: "warning",
@@ -209,14 +238,14 @@ export function buildMilestoneReminderCallbackResponse(value = {}) {
   return {
     toast: {
       type: "success",
-      content: "已记录知晓",
+      content: "已确认完成",
     },
     card: buildMilestoneReminderCard(Array.isArray(value.targets) ? value.targets : [], {
       baseUrl: value.baseUrl || "",
       title: value.title || "重点项目里程碑提醒",
       subtitle: value.subtitle || `${Array.isArray(value.targets) ? value.targets.length : 0} 个节点需要关注`,
       template: value.template || "green",
-      acknowledged: true,
+      completedMilestoneIds: value.milestoneIds || [],
     }),
   };
 }

@@ -23,4 +23,5 @@ test("resolveInitialProjectViewFromHash routes project deep links to maintenance
   assert.equal(resolveInitialProjectViewFromHash("#report:project_1", "calendar"), "report");
   assert.equal(resolveInitialProjectViewFromHash("#reportProject=project_1", "calendar"), "report");
   assert.equal(resolveInitialProjectViewFromHash("#calendar", "calendar"), "calendar");
+  assert.equal(resolveInitialProjectViewFromHash("#metrics", "calendar"), "metrics");
 });

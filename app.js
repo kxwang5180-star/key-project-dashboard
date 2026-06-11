@@ -38,6 +38,7 @@ import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js"
 import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
 import { getMetricTargetStatus } from "./src/ui/metric-status.js";
 import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
+import { buildMetricDashboardModel } from "./src/ui/metric-dashboard.js";
 import {
   buildProjectMaintenanceHash,
   parseProjectMaintenanceHash,
@@ -154,6 +155,7 @@ function getInitialMaintenanceProjectId() {
 
 function getViewHash(view) {
   if (view === "calendar") return "calendar";
+  if (view === "metrics") return "metrics";
   if (view === "register") return "register";
   if (view === "report") return "report";
   if (view === "governance") return "governance";
@@ -2162,6 +2164,156 @@ function renderMetrics() {
     .join("");
 }
 
+const metricDashboardColors = ["#2563eb", "#0f9f6e", "#e39318", "#e64646", "#0891b2", "#6d5bd0"];
+
+function renderMetricPie(container, slices, emptyText) {
+  if (!container) return;
+  const total = slices.reduce((sum, slice) => sum + slice.count, 0);
+  if (!total) {
+    container.innerHTML = `<div class="metric-empty-chart">${escapeHtml(emptyText)}</div>`;
+    return;
+  }
+
+  let cursor = 0;
+  const gradientStops = slices.map((slice, index) => {
+    const start = cursor;
+    const end = cursor + (slice.count / total) * 360;
+    cursor = end;
+    const color = metricDashboardColors[index % metricDashboardColors.length];
+    return `${color} ${start.toFixed(1)}deg ${end.toFixed(1)}deg`;
+  });
+
+  container.innerHTML = `
+    <div class="metric-donut" style="background: conic-gradient(${gradientStops.join(", ")});">
+      <span>${total}</span>
+      <small>指标</small>
+    </div>
+    <div class="metric-pie-legend">
+      ${slices
+        .map((slice, index) => {
+          const percent = Math.round((slice.count / total) * 100);
+          return `
+            <span>
+              <i style="background:${metricDashboardColors[index % metricDashboardColors.length]}"></i>
+              <b>${escapeHtml(slice.label)}</b>
+              ${slice.count}项 · ${percent}%
+            </span>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderMetricTrendDashboard(container, series) {
+  if (!container) return;
+  if (!series.length) {
+    container.innerHTML = `
+      <div class="metric-empty-chart">
+        <strong>暂无历史趋势</strong>
+        <span>在项目维护中点击“记录本期”后，这里会形成折线图。</span>
+      </div>
+    `;
+    return;
+  }
+
+  const values = series.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 720;
+  const height = 260;
+  const paddingX = 34;
+  const paddingY = 28;
+  const points = series.map((point, index) => {
+    const x = series.length === 1 ? width / 2 : paddingX + (index / (series.length - 1)) * (width - paddingX * 2);
+    const y = height - paddingY - ((point.value - min) / range) * (height - paddingY * 2);
+    return { ...point, x, y };
+  });
+  const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const area = `${paddingX},${height - paddingY} ${line} ${width - paddingX},${height - paddingY}`;
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="指标趋势折线图">
+      <defs>
+        <linearGradient id="metricTrendFill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#2563eb" stop-opacity="0.22"></stop>
+          <stop offset="100%" stop-color="#2563eb" stop-opacity="0"></stop>
+        </linearGradient>
+      </defs>
+      <path class="trend-grid" d="M${paddingX} ${paddingY}H${width - paddingX}M${paddingX} ${height / 2}H${width - paddingX}M${paddingX} ${height - paddingY}H${width - paddingX}"></path>
+      <polygon class="trend-area" points="${area}"></polygon>
+      <polyline class="trend-line" points="${line}"></polyline>
+      ${points
+        .map(
+          (point) => `
+            <g class="trend-point">
+              <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="5"></circle>
+              <title>${escapeHtml(point.date)} ${point.value}</title>
+            </g>
+          `
+        )
+        .join("")}
+      ${points
+        .filter((_, index) => index === 0 || index === points.length - 1 || index % 3 === 0)
+        .map((point) => `<text x="${point.x.toFixed(1)}" y="${height - 6}" text-anchor="middle">${escapeHtml(point.label)}</text>`)
+        .join("")}
+    </svg>
+    <div class="metric-trend-meta">
+      <span>最高 ${Math.round(max)}</span>
+      <span>最低 ${Math.round(min)}</span>
+      <span>${series.length} 个记录点</span>
+    </div>
+  `;
+}
+
+function renderMetricDashboard() {
+  if (!document.querySelector("#metricDashboardSummary")) return;
+  const model = buildMetricDashboardModel(projects, getProjectMetricItems);
+  const summaryCards = [
+    { label: "结构化指标", value: model.summary.metricCount, helper: `${model.summary.projectCount} 个项目` },
+    { label: "完整度", value: `${model.summary.readiness}%`, helper: `${model.summary.currentCount} 项已有当前值` },
+    { label: "已达成", value: model.summary.achievedCount, helper: `${model.summary.targetedCount} 项设置目标` },
+    { label: "推进中", value: model.summary.inProgressCount, helper: `${model.summary.goalOnlyCount} 项仅维护目标` },
+  ];
+
+  document.querySelector("#metricDashboardSummary").innerHTML = summaryCards
+    .map(
+      (card) => `
+        <article>
+          <span>${escapeHtml(card.label)}</span>
+          <strong>${escapeHtml(card.value)}</strong>
+          <small>${escapeHtml(card.helper)}</small>
+        </article>
+      `
+    )
+    .join("");
+
+  renderMetricTrendDashboard(document.querySelector("#metricTrendChart"), model.trendSeries);
+  renderMetricPie(document.querySelector("#metricStatusPie"), model.statusSlices, "暂无状态数据");
+  renderMetricPie(document.querySelector("#metricBusinessPie"), model.businessLineSlices, "暂无业务线数据");
+
+  document.querySelector("#metricTopList").innerHTML = model.topMetrics.length
+    ? model.topMetrics
+        .map(
+          (metric, index) => `
+            <article class="metric-top-item" style="--project-color: ${metric.color}">
+              <span class="metric-rank">${index + 1}</span>
+              <div>
+                <strong>${escapeHtml(metric.name)}</strong>
+                <small>${escapeHtml(metric.projectName)} · ${escapeHtml(metric.businessLine)}</small>
+              </div>
+              <div class="metric-progress-track" aria-label="进度 ${metric.progress}%">
+                <span style="width:${metric.progress}%"></span>
+              </div>
+              <b>${metric.progress}%</b>
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="metric-empty-chart">暂无可排行的百分比指标</div>';
+}
+
 function renderProjectSelects() {
   const pickerState = buildReportProjectPickerState(projects, memberProfile);
   const options = pickerState.projects
@@ -3058,12 +3210,14 @@ function renderMemberWorkspace() {
   renderReportStatusPanel();
 
   const list = document.querySelector("#submissionList");
-  if (!submissions.length) {
+  const reportProject = getReportProject();
+  const visibleSubmissions = submissions.filter((item) => item.projectId === reportProject?.id);
+  if (!visibleSubmissions.length) {
     list.innerHTML = '<div class="empty-state">还没有填报记录</div>';
     return;
   }
 
-  list.innerHTML = submissions
+  list.innerHTML = visibleSubmissions
     .slice()
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
     .slice(0, 8)
@@ -3415,6 +3569,7 @@ function render() {
   renderDetail();
   renderRisks();
   renderMetrics();
+  renderMetricDashboard();
   renderProjectSelects();
   renderAuthCenter();
   renderChatPickerModal();

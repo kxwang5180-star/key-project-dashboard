@@ -37,8 +37,9 @@ export function resolveAllowedProjectView(view = "calendar", user = null) {
   if (!user) return requestedView === "register" ? "register" : "register";
   if (requestedView === "register") return "register";
   if (user.isAdmin) return requestedView;
+  if (requestedView === "calendar" || requestedView === "metrics") return requestedView;
   if (!hasMaintainableProjects(user)) return "calendar";
-  if (requestedView === "report" || requestedView === "calendar") return requestedView;
+  if (requestedView === "report") return requestedView;
   return "calendar";
 }
 

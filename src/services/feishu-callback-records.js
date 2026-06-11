@@ -26,12 +26,25 @@ export function getFeishuCardActionValue(payload = {}) {
   return payload?.event?.action?.value || payload?.action?.value || {};
 }
 
+export function getFeishuCallbackMessageId(payload = {}) {
+  return String(
+    payload?.event?.context?.open_message_id ||
+      payload?.event?.context?.message_id ||
+      payload?.event?.open_message_id ||
+      payload?.event?.message_id ||
+      payload?.open_message_id ||
+      payload?.message_id ||
+      ""
+  ).trim();
+}
+
 export function buildFeishuCardCallbackAuditDetail(payload = {}) {
   const value = getFeishuCardActionValue(payload);
   return {
     eventId: String(payload?.header?.event_id || payload?.event_id || "").trim() || null,
     action: String(value?.action || "").trim() || null,
     chatId: String(payload?.event?.context?.open_chat_id || payload?.context?.open_chat_id || value?.chatId || "").trim() || null,
+    messageId: getFeishuCallbackMessageId(payload) || null,
     operatorOpenId: String(payload?.event?.operator?.open_id || payload?.operator?.open_id || "").trim() || null,
     projectIds: Array.isArray(value?.projectIds) ? value.projectIds : [],
     milestoneIds: Array.isArray(value?.milestoneIds) ? value.milestoneIds : [],

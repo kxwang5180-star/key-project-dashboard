@@ -17,6 +17,7 @@
           <nav class="view-switch" aria-label="页面切换">
             <button class="view-button is-active" type="button" data-view="dashboard">管理看板</button>
             <button class="view-button" type="button" data-view="calendar">里程碑日历</button>
+            <button class="view-button" type="button" data-view="metrics">指标看板</button>
             <button class="view-button" type="button" data-view="report">项目维护</button>
             <button class="view-button" type="button" data-view="governance">项目巡查</button>
           </nav>
@@ -86,6 +87,61 @@
             </div>
             <div class="project-legend" id="calendarProjectLegend" aria-label="项目筛选"></div>
             <div class="calendar-grid" id="calendarGrid"></div>
+          </section>
+        </section>
+
+        <section class="app-view" id="metricsView">
+          <section class="metrics-dashboard-page">
+            <section class="panel metrics-hero-panel">
+              <div>
+                <p class="eyebrow">指标看板</p>
+                <h2>项目指标全景</h2>
+                <p>按项目维护中的指标设置自动聚合，统一查看达成、推进、目标和业务线分布。</p>
+              </div>
+              <div id="metricDashboardSummary" class="metric-dashboard-summary"></div>
+            </section>
+
+            <section class="metrics-dashboard-grid">
+              <section class="panel metric-chart-panel metric-trend-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>指标趋势</h2>
+                    <p>来自项目维护中“记录本期”的历史值</p>
+                  </div>
+                </div>
+                <div id="metricTrendChart" class="metric-trend-chart"></div>
+              </section>
+
+              <section class="panel metric-chart-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>状态分布</h2>
+                    <p>按当前值与目标值自动判断</p>
+                  </div>
+                </div>
+                <div id="metricStatusPie" class="metric-pie-card"></div>
+              </section>
+
+              <section class="panel metric-chart-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>业务线占比</h2>
+                    <p>按指标数量聚合</p>
+                  </div>
+                </div>
+                <div id="metricBusinessPie" class="metric-pie-card"></div>
+              </section>
+            </section>
+
+            <section class="panel metric-ranking-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>重点指标排行</h2>
+                  <p>优先展示已形成进度百分比的指标</p>
+                </div>
+              </div>
+              <div id="metricTopList" class="metric-top-list"></div>
+            </section>
           </section>
         </section>
 

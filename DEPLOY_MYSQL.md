@@ -232,10 +232,17 @@ https://your-domain.com/api/auth/feishu/callback
 FEISHU_APP_ID="cli_xxx"
 FEISHU_APP_SECRET="xxx"
 FEISHU_SCOPES="contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read im:message"
+FEISHU_CALLBACK_VERIFICATION_TOKEN="飞书事件与回调里的 Verification Token"
 PUBLIC_BASE_URL="http://172.20.180.157/#report"
 ```
 
 项目必须已经在页面中绑定飞书群聊；脚本只会向已绑定 `feishuChatId` 的项目群发送。
+
+如果启用“确认完成”按钮，还需要在飞书开放平台配置：
+
+- 事件与回调：卡片回调地址填写 `http://172.20.180.157/api/feishu/callback`
+- Verification Token：与服务器 `.env` 里的 `FEISHU_CALLBACK_VERIFICATION_TOKEN` 保持一致
+- 权限：`FEISHU_SCOPES` 需要包含 `im:message`，用于发送与更新卡片消息
 
 测试发送到“飞书机器人测试群”：
 

@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { config } from "../config.js";
 import { asyncRoute } from "../lib/async-route.js";
+import { prisma } from "../lib/prisma.js";
+import { fetchTenantAccessToken, updateFeishuCardMessage } from "../lib/feishu.js";
 import {
   buildFeishuCardCallbackAuditDetail,
   getFeishuCardActionValue,
+  getFeishuCallbackMessageId,
   resolveFeishuChallengeResponse,
   verifyFeishuCallbackToken,
 } from "../services/feishu-callback-records.js";
@@ -22,6 +25,33 @@ feishuCallbackRouter.post("/", asyncRoute(async (req, res) => {
 
   const actionValue = getFeishuCardActionValue(payload);
   const response = buildMilestoneReminderCallbackResponse(actionValue);
+  const action = String(actionValue?.action || "").trim();
+  const milestoneIds = Array.isArray(actionValue?.milestoneIds)
+    ? actionValue.milestoneIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+
+  if (action === "milestone_reminder_mark_done" && milestoneIds.length) {
+    await prisma.milestone.updateMany({
+      where: {
+        id: { in: milestoneIds },
+        status: { not: "COMPLETED" },
+      },
+      data: {
+        status: "COMPLETED",
+        changeSummary: "通过飞书里程碑提醒卡片确认完成",
+      },
+    });
+
+    const messageId = getFeishuCallbackMessageId(payload);
+    if (messageId && response.card) {
+      const tenantAccessToken = await fetchTenantAccessToken();
+      await updateFeishuCardMessage({
+        messageId,
+        card: response.card,
+        tenantAccessToken,
+      });
+    }
+  }
 
   await writeAuditLog({
     action: "feishu.card.callback",
