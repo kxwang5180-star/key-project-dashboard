@@ -1034,6 +1034,8 @@ function getDefaultMetricItems(project) {
     }));
   }
 
+  if (sourceMetricRows.length) return [];
+
   if (project.metricHighlights.length) {
     return project.metricHighlights.map((item, index) => ({
       id: `${project.id}-metric-${index + 1}`,
@@ -2363,6 +2365,98 @@ function renderMetricCatalogRecord(metric) {
   `;
 }
 
+function renderMetricStatusBars(statusCounts, total) {
+  if (!statusCounts.length || !total) return '<div class="metric-status-bar is-empty"></div>';
+  return `
+    <div class="metric-status-bar" aria-label="指标状态构成">
+      ${statusCounts
+        .map(
+          (item) => `
+            <span class="is-status-${item.key}" style="width:${Math.max(8, Math.round((item.count / total) * 100))}%"></span>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderMetricProjectSummary(container, groups) {
+  if (!container) return;
+  const withMetrics = groups.filter((group) => group.metricCount > 0).length;
+  const currentReady = groups.filter((group) => group.metricCount > 0 && group.currentCount > 0).length;
+  const targetReady = groups.filter((group) => group.metricCount > 0 && group.targetCount > 0).length;
+  const empty = groups.length - withMetrics;
+  container.innerHTML = [
+    ["已配置项目", `${withMetrics}/${groups.length}`, "green"],
+    ["已有当前值", `${currentReady}/${groups.length}`, "blue"],
+    ["已有目标值", `${targetReady}/${groups.length}`, "amber"],
+    ["待补指标", `${empty}`, empty ? "rose" : "green"],
+  ]
+    .map(
+      ([label, value, tone]) => `
+        <article class="metric-project-summary-card tone-${tone}">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderMetricProjectCard(group) {
+  const statusPills = group.statusCounts.length
+    ? group.statusCounts
+        .map((item) => `<span class="metric-status-badge is-status-${item.key}">${escapeHtml(item.label)} ${item.count}</span>`)
+        .join("")
+    : '<span class="metric-status-badge is-status-empty">暂无指标</span>';
+  const metricRows = group.metrics.length
+    ? group.metrics
+        .map((metric) => {
+          const current = metric.current || "待填当前值";
+          const target = metric.target || "未设目标";
+          return `
+            <article class="project-metric-row is-status-${metric.status.key}">
+              <div class="project-metric-title">
+                <span class="metric-status-dot is-status-${metric.status.key}"></span>
+                <strong>${escapeHtml(metric.name)}</strong>
+              </div>
+              <div class="project-metric-values">
+                <span><b>${escapeHtml(current)}</b><small>当前</small></span>
+                <span><b>${escapeHtml(target)}</b><small>目标</small></span>
+              </div>
+              <p>${escapeHtml(metric.observation || "未维护计算口径")}</p>
+            </article>
+          `;
+        })
+        .join("")
+    : '<div class="metric-empty-project">最新指标表未配置结构化指标</div>';
+  return `
+    <article class="metric-project-card is-status-${group.leadStatus}" style="--project-color: ${group.color}">
+      <header>
+        <div>
+          <span>${escapeHtml(group.businessLine)} · ${escapeHtml(group.owner)}</span>
+          <h3>${escapeHtml(group.projectName)}</h3>
+        </div>
+        <strong>${group.metricCount}</strong>
+      </header>
+      ${renderMetricStatusBars(group.statusCounts, group.metricCount)}
+      <div class="metric-project-meta">
+        <span>当前值 ${group.currentCount}/${group.metricCount}</span>
+        <span>目标值 ${group.targetCount}/${group.metricCount}</span>
+      </div>
+      <div class="metric-project-statuses">${statusPills}</div>
+      <div class="project-metric-list">${metricRows}</div>
+    </article>
+  `;
+}
+
+function renderMetricProjectBoard(container, groups) {
+  if (!container) return;
+  container.innerHTML = groups.length
+    ? groups.map(renderMetricProjectCard).join("")
+    : '<div class="metric-empty-chart">暂无项目指标</div>';
+}
+
 function renderMetricAllGroups(container, groups) {
   if (!container) return;
   container.innerHTML = groups.length
@@ -2412,12 +2506,19 @@ function renderMetricDashboard() {
   if (catalogMeta) {
     catalogMeta.textContent = `${model.metricGroups.length} 个业务线 · ${model.summary.metricCount} 项指标，组内优先显示需推进和待补项`;
   }
+  const projectMeta = document.querySelector("#metricProjectMeta");
+  if (projectMeta) {
+    const configured = model.projectGroups.filter((group) => group.metricCount > 0).length;
+    projectMeta.textContent = `${configured}/${model.projectGroups.length} 个项目已配置结构化指标`;
+  }
   renderMetricActionSummary(document.querySelector("#metricActionSummary"), model.actionGroups, model.summary.metricCount);
-  renderMetricPie(document.querySelector("#metricStatusPie"), model.statusSlices, "暂无状态数据");
-  renderMetricPie(document.querySelector("#metricBusinessPie"), model.businessLineSlices, "暂无业务线数据");
+  renderMetricProjectSummary(document.querySelector("#metricProjectSummary"), model.projectGroups);
+  renderMetricProjectBoard(document.querySelector("#metricProjectBoard"), model.projectGroups);
   renderMetricAllGroups(document.querySelector("#metricAllGroups"), model.metricGroups);
 
-  document.querySelector("#metricTopList").innerHTML = model.topMetrics.length
+  const metricTopList = document.querySelector("#metricTopList");
+  if (!metricTopList) return;
+  metricTopList.innerHTML = model.topMetrics.length
     ? model.topMetrics
         .map(
           (metric, index) => `
@@ -2484,12 +2585,29 @@ function renderAuthCenter() {
   if (!memberProfile) {
     state.identityManageOpen = false;
     authPanel.innerHTML = `
-      <div class="auth-stack login-entry">
+      <div class="auth-stack login-entry auth-entry-premium">
+        <div class="auth-mark" aria-hidden="true">
+          <span></span>
+          <b></b>
+        </div>
         <div class="auth-copy">
+          <span class="login-status-dot">飞书统一身份</span>
           <strong>${escapeHtml(authModel.title)}</strong>
           <p>${escapeHtml(authModel.subtitle)}</p>
         </div>
         <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
+        <div class="auth-permission-grid">
+          ${authModel.permissions
+            .map(
+              (item) => `
+                <article>
+                  <span>${escapeHtml(item.label)}</span>
+                  <small>${escapeHtml(item.value)}</small>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
         <small class="login-note">${escapeHtml(authModel.notes[0] || "")}</small>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>

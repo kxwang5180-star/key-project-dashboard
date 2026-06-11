@@ -1719,6 +1719,10 @@ h3 {
   align-items: stretch;
 }
 
+.metrics-overview-grid-compact {
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.62fr);
+}
+
 .metric-chart-panel {
   min-width: 0;
 }
@@ -1913,6 +1917,10 @@ h3 {
   --status-color: var(--green);
 }
 
+.metric-action-card.is-status-observing {
+  --status-color: var(--cyan);
+}
+
 .metric-action-card span,
 .metric-action-card small {
   color: var(--muted);
@@ -1936,6 +1944,264 @@ h3 {
   border-radius: 999px;
   background: color-mix(in srgb, var(--status-color, var(--blue)) 13%, #fff);
   color: var(--ink-soft);
+}
+
+.metric-project-overview-panel,
+.metric-project-panel {
+  min-width: 0;
+}
+
+.metric-project-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-project-summary-card {
+  border: 1px solid color-mix(in srgb, var(--summary-color, var(--blue)) 18%, var(--line));
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--summary-color, var(--blue)) 11%, transparent), rgba(255, 255, 255, 0.88)),
+    var(--surface-solid);
+  padding: 14px;
+}
+
+.metric-project-summary-card.tone-green {
+  --summary-color: var(--green);
+}
+
+.metric-project-summary-card.tone-blue {
+  --summary-color: var(--blue);
+}
+
+.metric-project-summary-card.tone-amber {
+  --summary-color: var(--amber);
+}
+
+.metric-project-summary-card.tone-rose {
+  --summary-color: var(--rose);
+}
+
+.metric-project-summary-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.metric-project-summary-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.metric-project-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-project-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(208, 219, 232, 0.92);
+  border-top: 4px solid var(--project-color, var(--blue));
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--project-color, var(--blue)) 6%, transparent), rgba(255, 255, 255, 0.92)),
+    var(--surface-solid);
+  padding: 16px;
+}
+
+.metric-project-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.metric-project-card header span,
+.metric-project-meta span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.metric-project-card h3 {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.metric-project-card header strong {
+  display: grid;
+  place-items: center;
+  min-width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--project-color, var(--blue)) 12%, #fff);
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.metric-status-bar {
+  display: flex;
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-strong);
+}
+
+.metric-status-bar span {
+  min-width: 6px;
+}
+
+.metric-status-bar.is-empty {
+  background: repeating-linear-gradient(90deg, #edf2f8 0 8px, #e2eaf3 8px 16px);
+}
+
+.metric-status-bar .is-status-achieved,
+.metric-status-dot.is-status-achieved {
+  background: var(--green);
+}
+
+.metric-status-bar .is-status-in-progress,
+.metric-status-dot.is-status-in-progress {
+  background: var(--blue);
+}
+
+.metric-status-bar .is-status-goal,
+.metric-status-dot.is-status-goal {
+  background: var(--amber);
+}
+
+.metric-status-bar .is-status-tracking,
+.metric-status-dot.is-status-tracking {
+  background: var(--cyan);
+}
+
+.metric-status-bar .is-status-observing,
+.metric-status-dot.is-status-observing {
+  background: var(--violet);
+}
+
+.metric-status-bar .is-status-empty,
+.metric-status-dot.is-status-empty {
+  background: var(--rose);
+}
+
+.metric-project-meta,
+.metric-project-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-metric-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-metric-row {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--metric-row-color, var(--blue));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.76);
+  padding: 12px;
+}
+
+.project-metric-row.is-status-achieved {
+  --metric-row-color: var(--green);
+}
+
+.project-metric-row.is-status-in-progress {
+  --metric-row-color: var(--blue);
+}
+
+.project-metric-row.is-status-goal {
+  --metric-row-color: var(--amber);
+}
+
+.project-metric-row.is-status-tracking {
+  --metric-row-color: var(--cyan);
+}
+
+.project-metric-row.is-status-observing {
+  --metric-row-color: var(--violet);
+}
+
+.project-metric-row.is-status-empty {
+  --metric-row-color: var(--rose);
+}
+
+.project-metric-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.metric-status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.project-metric-title strong {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-metric-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-metric-values span {
+  min-width: 0;
+  border-radius: 8px;
+  background: #f6f9fc;
+  padding: 8px;
+}
+
+.project-metric-values b,
+.project-metric-values small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-metric-values b {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.project-metric-values small,
+.project-metric-row p,
+.metric-empty-project {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.5;
+}
+
+.project-metric-row p {
+  margin: 0;
+}
+
+.metric-empty-project {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: rgba(246, 249, 252, 0.68);
+  padding: 14px;
 }
 
 .metric-catalog-layout {
@@ -2858,7 +3124,13 @@ button:disabled {
 
 .auth-card.is-login-only {
   min-height: 0;
-  padding: 28px;
+  overflow: hidden;
+  border-color: rgba(20, 32, 51, 0.16);
+  background:
+    linear-gradient(145deg, rgba(20, 32, 51, 0.96), rgba(28, 67, 88, 0.94)),
+    var(--ink);
+  color: #f8fbff;
+  padding: 0;
 }
 
 .auth-card.is-login-only .panel-header {
@@ -2871,11 +3143,89 @@ button:disabled {
   justify-items: start;
 }
 
+.auth-entry-premium {
+  position: relative;
+  gap: 18px;
+  padding: 30px;
+}
+
+.auth-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(152, 241, 220, 0.42);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auth-mark span,
+.auth-mark b {
+  display: block;
+  width: 26px;
+  height: 2px;
+  border-radius: 999px;
+  background: #98f1dc;
+}
+
+.auth-mark b {
+  width: 18px;
+  margin-top: 7px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.auth-entry-premium .auth-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-entry-premium .auth-copy strong {
+  color: #fff;
+  font-size: 24px;
+}
+
+.auth-entry-premium .auth-copy p,
+.auth-entry-premium .login-note {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.auth-entry-premium .login-status-dot {
+  background: rgba(152, 241, 220, 0.12);
+  color: #98f1dc;
+}
+
 .login-note {
   color: var(--muted);
   font-size: 12px;
   font-weight: 720;
   line-height: 1.5;
+}
+
+.auth-permission-grid {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.auth-permission-grid article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+}
+
+.auth-permission-grid span {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.auth-permission-grid small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .login-status-dot {
@@ -2917,6 +3267,13 @@ button:disabled {
 .feishu-login-button {
   min-width: 172px;
   padding: 0 22px;
+}
+
+.auth-entry-premium .feishu-login-button {
+  min-height: 44px;
+  background: #98f1dc;
+  color: #102033;
+  box-shadow: none;
 }
 
 .identity-card,
@@ -5277,6 +5634,7 @@ button:disabled {
   .metrics-overview-grid,
   .metrics-dashboard-grid,
   .metric-catalog-layout,
+  .metric-project-board,
   .data-health-strip {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5399,6 +5757,10 @@ button:disabled {
 
   .metric-action-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-project-board {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .metric-catalog-row {
@@ -5576,6 +5938,8 @@ button:disabled {
   .member-card,
   .metrics-hero-panel,
   .metric-action-panel,
+  .metric-project-overview-panel,
+  .metric-project-panel,
   .metric-chart-panel,
   .metric-all-panel,
   .metric-ranking-panel {
@@ -5692,6 +6056,15 @@ button:disabled {
   .metric-dashboard-summary article,
   .metric-action-card {
     min-height: 82px;
+  }
+
+  .metric-project-summary,
+  .project-metric-values {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-project-card {
+    padding: 14px;
   }
 
   .metric-dashboard-summary strong,

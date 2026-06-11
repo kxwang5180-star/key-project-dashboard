@@ -115,6 +115,46 @@ function buildActionGroups(records) {
     .filter((group) => group.count > 0);
 }
 
+function buildProjectGroups(projects, records) {
+  return projects
+    .map((project) => {
+      const metrics = records.filter((record) => record.projectId === project.id);
+      const statusCounts = STATUS_ORDER
+        .map((key) => ({
+          key,
+          label: STATUS_LABELS[key],
+          count: metrics.filter((record) => record.status.key === key).length,
+        }))
+        .filter((item) => item.count > 0);
+      const currentCount = metrics.filter((record) => record.status.hasCurrent).length;
+      const targetCount = metrics.filter((record) => record.status.hasTarget).length;
+      const leadStatus = metrics
+        .slice()
+        .sort((a, b) => getActionRank(a) - getActionRank(b))[0]?.status.key || "empty";
+
+      return {
+        projectId: project.id,
+        projectName: project.shortName || project.name || "未命名项目",
+        businessLine: project.businessLine || "未填业务线",
+        owner: project.owner || "未填写",
+        color: project.color || "#2563eb",
+        metricCount: metrics.length,
+        currentCount,
+        targetCount,
+        readiness: metrics.length ? Math.round((currentCount / metrics.length) * 100) : 0,
+        targetCoverage: metrics.length ? Math.round((targetCount / metrics.length) * 100) : 0,
+        leadStatus,
+        statusCounts,
+        metrics: metrics.sort((a, b) => getActionRank(a) - getActionRank(b) || a.name.localeCompare(b.name, "zh-CN")),
+      };
+    })
+    .sort((a, b) => {
+      if (a.metricCount === 0 && b.metricCount > 0) return 1;
+      if (a.metricCount > 0 && b.metricCount === 0) return -1;
+      return a.businessLine.localeCompare(b.businessLine, "zh-CN") || a.projectName.localeCompare(b.projectName, "zh-CN");
+    });
+}
+
 export function buildMetricDashboardModel(projects, getMetricItems) {
   const records = projects.flatMap((project) =>
     getMetricItems(project).map((metric, index) => toMetricRecord(project, metric, index))
@@ -147,5 +187,6 @@ export function buildMetricDashboardModel(projects, getMetricItems) {
     trendSeries: buildTrendSeries(records).slice(-12),
     metricGroups: buildMetricGroups(records),
     actionGroups: buildActionGroups(records),
+    projectGroups: buildProjectGroups(projects, records),
   };
 }

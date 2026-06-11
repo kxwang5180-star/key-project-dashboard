@@ -6,6 +6,7 @@ const projects = [
   { id: "p1", shortName: "合同系统", businessLine: "财务人事", color: "#2563eb" },
   { id: "p2", shortName: "门店大脑", businessLine: "门店提效", color: "#0f9f6e" },
   { id: "p3", shortName: "流程引擎", businessLine: "协同办公", color: "#e39318" },
+  { id: "p4", shortName: "一餐系统", businessLine: "C端", color: "#6d5bd0" },
 ];
 
 const metricMap = {
@@ -33,7 +34,7 @@ const metricMap = {
 test("buildMetricDashboardModel summarizes metric status and readiness", () => {
   const model = buildMetricDashboardModel(projects, (project) => metricMap[project.id] || []);
 
-  assert.equal(model.summary.projectCount, 3);
+  assert.equal(model.summary.projectCount, 4);
   assert.equal(model.summary.metricCount, 5);
   assert.equal(model.summary.targetedCount, 5);
   assert.equal(model.summary.achievedCount, 3);
@@ -103,4 +104,20 @@ test("buildMetricDashboardModel groups every metric by business line with action
       ["achieved", 3],
     ]
   );
+});
+
+test("buildMetricDashboardModel groups metrics by project and keeps empty projects visible", () => {
+  const model = buildMetricDashboardModel(projects, (project) => metricMap[project.id] || []);
+
+  assert.equal(model.projectGroups.length, 4);
+  assert.deepEqual(
+    model.projectGroups.map((group) => [group.projectName, group.metricCount, group.currentCount, group.targetCount]),
+    [
+      ["合同系统", 2, 2, 2],
+      ["门店大脑", 2, 1, 2],
+      ["流程引擎", 1, 1, 1],
+      ["一餐系统", 0, 0, 0],
+    ]
+  );
+  assert.equal(model.projectGroups.at(-1).leadStatus, "empty");
 });

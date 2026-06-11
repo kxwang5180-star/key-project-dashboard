@@ -70,20 +70,21 @@ test("project source maintains explicit milestone schedule", () => {
 test("project source maintains explicit metric definitions", () => {
   const { metrics } = readProjectData();
 
-  assert.equal(metrics.length, 41);
+  assert.equal(metrics.length, 43);
   assert.equal(metrics[0].projectName, "【合同系统】项目");
-  assert.equal(metrics[0].name, "Q2需求完成进度");
-  assert.equal(metrics[0].current, "73.9%");
+  assert.equal(metrics[0].name, "Q2需求完成率");
+  assert.equal(metrics[0].current, "55.5%");
   assert.equal(metrics[0].target, "100%");
-  assert.equal(metrics[0].observation, "已完成需求数 / Q2需求总数");
+  assert.equal(metrics[0].observation, "已完成需求数÷Q2需求总数；可观测：当前已可观测");
   assert.ok(
     metrics.some(
       (metric) =>
-        metric.projectName === "【大排档赋值台计数】项目" &&
-        metric.name === "菜品点单率统计能力" &&
-        metric.observation === "基于小票菜品明细及点单记录统计"
+        metric.projectName === "【IPAD自助结账】项目" &&
+        metric.name === "年节省人工成本" &&
+        metric.target === "2700万元"
     )
   );
-  assert.equal(metrics.at(-1).projectName, "【敏捷自助分析平台】项目");
-  assert.equal(metrics.at(-1).name, "人事团队分析/取数成本节省");
+  assert.equal(metrics.at(-1).projectName, "【流程引擎替换OA】项目");
+  assert.equal(metrics.at(-1).name, "自动化事件执行成功率");
+  assert.equal(metrics.at(-1).target, "≥70%");
 });

@@ -96,64 +96,42 @@
             <section class="panel metrics-hero-panel">
               <div>
                 <p class="eyebrow">指标看板</p>
-                <h2>项目指标全景</h2>
-                <p>按项目维护中的指标设置自动聚合，统一查看达成、推进、目标和业务线分布。</p>
+                <h2>项目指标视图</h2>
+                <p>按项目查看最新指标、目标口径和可观测时间，优先识别仅有目标和待补项。</p>
               </div>
               <div id="metricDashboardSummary" class="metric-dashboard-summary"></div>
             </section>
 
-            <section class="metrics-overview-grid">
+            <section class="metrics-overview-grid metrics-overview-grid-compact">
               <section class="panel metric-action-panel">
                 <div class="panel-header">
                   <div>
                     <h2>指标状态</h2>
-                    <p>优先关注推进中、仅有目标和待补项</p>
+                    <p>使用状态类型色，直接反映当前指标可用程度</p>
                   </div>
                 </div>
                 <div id="metricActionSummary" class="metric-action-summary"></div>
               </section>
 
-              <section class="panel metric-chart-panel">
+              <section class="panel metric-project-overview-panel">
                 <div class="panel-header">
                   <div>
-                    <h2>状态分布</h2>
-                    <p>按当前值与目标值自动判断</p>
+                    <h2>项目覆盖</h2>
+                    <p id="metricProjectMeta">按项目分组展示全部指标</p>
                   </div>
                 </div>
-                <div id="metricStatusPie" class="metric-pie-card"></div>
-              </section>
-
-              <section class="panel metric-chart-panel">
-                <div class="panel-header">
-                  <div>
-                    <h2>业务线占比</h2>
-                    <p>按指标数量聚合</p>
-                  </div>
-                </div>
-                <div id="metricBusinessPie" class="metric-pie-card"></div>
+                <div id="metricProjectSummary" class="metric-project-summary"></div>
               </section>
             </section>
 
-            <section class="metric-catalog-layout">
-              <section class="panel metric-all-panel">
-                <div class="panel-header">
-                  <div>
-                    <h2>全部指标</h2>
-                    <p id="metricCatalogMeta">按业务线归类，组内按需关注程度排序</p>
-                  </div>
+            <section class="panel metric-project-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>项目指标明细</h2>
+                  <p>每个项目一组，展示当前值、目标值、计算口径和可观测时间</p>
                 </div>
-                <div id="metricAllGroups" class="metric-all-groups"></div>
-              </section>
-
-              <aside class="panel metric-ranking-panel">
-                <div class="panel-header">
-                  <div>
-                    <h2>达成排行</h2>
-                    <p>展示可计算百分比的指标</p>
-                  </div>
-                </div>
-                <div id="metricTopList" class="metric-top-list"></div>
-              </aside>
+              </div>
+              <div id="metricProjectBoard" class="metric-project-board"></div>
             </section>
           </section>
         </section>
