@@ -9,13 +9,7 @@ test("buildAuthPanelViewModel keeps the signed-out login page focused", () => {
   assert.equal(model.title, "进入重点项目驾驶舱");
   assert.deepEqual(model.actions, [{ key: "login", label: "飞书登录进入", tone: "primary" }]);
   assert.equal(model.notes.length, 0);
-  assert.deepEqual(
-    model.permissions,
-    [
-      { label: "人员登录", items: ["获取用户身份标识", "获取用户基本信息"] },
-      { label: "王康旭", items: ["查看群信息", "查看群成员", "获取用户身份标识", "获取用户基本信息", "以应用的身份发消息"] },
-    ]
-  );
+  assert.equal("permissions" in model, false);
 });
 
 test("buildAuthPanelViewModel gives members only useful entry actions", () => {

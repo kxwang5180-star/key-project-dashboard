@@ -2653,23 +2653,6 @@ function renderAuthCenter() {
           </div>
           <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
         </div>
-        <div class="auth-permission-panel">
-          <span>权限范围</span>
-          <div class="auth-permission-grid">
-            ${authModel.permissions
-              .map(
-                (group) => `
-                  <article>
-                    <strong>${escapeHtml(group.label)}</strong>
-                    <div>
-                      ${group.items.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
-                    </div>
-                  </article>
-                `
-              )
-              .join("")}
-          </div>
-        </div>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;

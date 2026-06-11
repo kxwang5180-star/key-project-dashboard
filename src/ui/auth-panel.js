@@ -16,16 +16,6 @@ export function buildAuthPanelViewModel({ user = null, projects = [] } = {}) {
       title: "进入重点项目驾驶舱",
       subtitle: "使用飞书身份登录后进入项目看板。",
       notes: [],
-      permissions: [
-        {
-          label: "人员登录",
-          items: ["获取用户身份标识", "获取用户基本信息"],
-        },
-        {
-          label: "王康旭",
-          items: ["查看群信息", "查看群成员", "获取用户身份标识", "获取用户基本信息", "以应用的身份发消息"],
-        },
-      ],
       actions: [{ key: "login", label: "飞书登录进入", tone: "primary" }],
       showIdentityManagement: false,
       defaultProjectName: "",
@@ -45,7 +35,6 @@ export function buildAuthPanelViewModel({ user = null, projects = [] } = {}) {
     title: user.name || "已登录",
     subtitle: user.role || "成员",
     notes: [],
-    permissions: [],
     actions,
     showIdentityManagement: Boolean(user.canManageIdentity),
     defaultProjectName: findDefaultProjectName(projects, user),
