@@ -6,6 +6,7 @@ import {
   getMilestoneReportPreview,
   getNearestMilestone,
   getVisibleCalendarEvents,
+  getVisibleMilestones,
   getWeekRangeSummary,
 } from "../../src/ui/report-experience.js";
 
@@ -30,6 +31,27 @@ test("getVisibleCalendarEvents limits day events until the day is expanded", () 
   });
   assert.deepEqual(getVisibleCalendarEvents(events, { expanded: true, limit: 3 }), {
     visible: events,
+    hiddenCount: 0,
+    isExpanded: true,
+  });
+});
+
+test("getVisibleMilestones keeps the active milestone visible when collapsed", () => {
+  const milestones = [
+    { id: "m1" },
+    { id: "m2" },
+    { id: "m3" },
+    { id: "m4" },
+    { id: "m5" },
+  ];
+
+  assert.deepEqual(getVisibleMilestones(milestones, { expanded: false, limit: 3, pinnedId: "m5" }), {
+    visible: [{ id: "m1" }, { id: "m2" }, { id: "m5" }],
+    hiddenCount: 2,
+    isExpanded: false,
+  });
+  assert.deepEqual(getVisibleMilestones(milestones, { expanded: true, limit: 3, pinnedId: "m5" }), {
+    visible: milestones,
     hiddenCount: 0,
     isExpanded: true,
   });

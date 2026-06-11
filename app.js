@@ -19,6 +19,7 @@ import {
   getMilestoneReportPreview,
   getNearestMilestone,
   getVisibleCalendarEvents,
+  getVisibleMilestones,
   getWeekRangeSummary,
 } from "./src/ui/report-experience.js";
 import { hasMeaningfulReportProgress } from "./src/services/report-records.js";
@@ -41,6 +42,7 @@ import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
 import { getMetricTargetStatus } from "./src/ui/metric-status.js";
 import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
 import { buildMetricDashboardModel } from "./src/ui/metric-dashboard.js";
+import { PROJECT_METRIC_SOURCE_VERSION, shouldUseSavedMetrics } from "./src/ui/metric-source.js";
 import {
   buildProjectMaintenanceHash,
   parseProjectMaintenanceHash,
@@ -77,6 +79,7 @@ const state = {
   dataSource: "static",
   pendingActions: {},
   expandedCalendarDays: {},
+  expandedProjectMilestones: {},
   expandedMilestoneReports: {},
   expandedMetricDetails: {},
   expandedSubmissionDetails: {},
@@ -1069,8 +1072,17 @@ function persistProjectMaintenance() {
 }
 
 function getProjectMetricItems(project) {
-  const saved = getProjectMaintenance(project.id).metrics;
-  if (Array.isArray(saved) && saved.length) return saved;
+  const maintenance = getProjectMaintenance(project.id);
+  const saved = maintenance.metrics;
+  if (
+    shouldUseSavedMetrics({
+      savedMetrics: saved,
+      sourceMetricRows,
+      metricsSourceVersion: maintenance.metricsSourceVersion,
+    })
+  ) {
+    return saved;
+  }
   return getDefaultMetricItems(project);
 }
 
@@ -1105,7 +1117,8 @@ function commitBriefDraft(project) {
 }
 
 function setProjectMetricItems(project, metrics) {
-  getProjectMaintenance(project.id).metrics = metrics.map((metric, index) => ({
+  const maintenance = getProjectMaintenance(project.id);
+  maintenance.metrics = metrics.map((metric, index) => ({
     id: metric.id || uid(`${project.id}-metric`),
     name: String(metric.name || `指标 ${index + 1}`).trim(),
     current: String(metric.current || "").trim(),
@@ -1114,6 +1127,7 @@ function setProjectMetricItems(project, metrics) {
     chartType: String(metric.chartType || "").trim(),
     history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
   }));
+  maintenance.metricsSourceVersion = PROJECT_METRIC_SOURCE_VERSION;
   persistProjectMaintenance();
 }
 
@@ -2036,7 +2050,11 @@ function renderDetail() {
     return;
   }
 
-  const milestones = getReportMilestones(project).slice(0, 10).map(
+  const milestoneState = getVisibleMilestones(getReportMilestones(project), {
+    expanded: Boolean(state.expandedProjectMilestones[project.id]),
+    limit: 6,
+  });
+  const milestones = milestoneState.visible.map(
     (milestone) => `
       <button class="timeline-item" data-project="${milestone.projectId}" data-milestone="${milestone.id}">
         <span class="timeline-date">${escapeHtml(milestone.dateInfo?.label || "未标日期")}</span>
@@ -2047,6 +2065,11 @@ function renderDetail() {
       </button>
     `
   );
+  const milestoneToggle = milestoneState.hiddenCount
+    ? `<button class="timeline-limit-action" type="button" data-toggle-detail-milestones="${project.id}">展开其余 ${milestoneState.hiddenCount} 个节点</button>`
+    : milestoneState.isExpanded && getReportMilestones(project).length > 6
+      ? `<button class="timeline-limit-action" type="button" data-toggle-detail-milestones="${project.id}">收起节点</button>`
+      : "";
   const updateBlock = renderProjectSubmissions(project.id);
   const overview = `
     <div class="detail-overview-grid">
@@ -2083,6 +2106,7 @@ function renderDetail() {
       <div class="detail-block">
         <h3>里程碑计划</h3>
         <div class="timeline">${milestones.join("") || '<p class="muted-text">暂无可识别里程碑</p>'}</div>
+        ${milestoneToggle}
       </div>
     `,
     updates: `
@@ -2380,6 +2404,22 @@ function renderMetricStatusBars(statusCounts, total) {
   `;
 }
 
+function formatMetricValue(value) {
+  return String(value || "").trim() || "无";
+}
+
+function splitMetricObservation(value) {
+  const source = String(value || "").trim();
+  if (!source) return { formula: "未维护计算口径", observable: "未明确" };
+  const marker = "；可观测：";
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) return { formula: source, observable: "未明确" };
+  return {
+    formula: source.slice(0, markerIndex).trim() || "未维护计算口径",
+    observable: source.slice(markerIndex + marker.length).trim() || "未明确",
+  };
+}
+
 function renderMetricProjectSummary(container, groups) {
   if (!container) return;
   const withMetrics = groups.filter((group) => group.metricCount > 0).length;
@@ -2403,32 +2443,47 @@ function renderMetricProjectSummary(container, groups) {
     .join("");
 }
 
+function renderProjectMetricRow(metric) {
+  const detail = splitMetricObservation(metric.observation);
+  return `
+    <details class="project-metric-row is-status-${metric.status.key}">
+      <summary>
+        <span class="metric-status-dot is-status-${metric.status.key}"></span>
+        <strong>${escapeHtml(metric.name)}</strong>
+        <span class="project-metric-value is-current">${escapeHtml(formatMetricValue(metric.current))}</span>
+        <span class="project-metric-value">${escapeHtml(formatMetricValue(metric.target))}</span>
+        <em>详情</em>
+      </summary>
+      <div class="project-metric-detail">
+        <span><b>计算口径</b>${escapeHtml(detail.formula)}</span>
+        <span><b>可观测时间</b>${escapeHtml(detail.observable)}</span>
+      </div>
+    </details>
+  `;
+}
+
 function renderMetricProjectCard(group) {
   const statusPills = group.statusCounts.length
     ? group.statusCounts
         .map((item) => `<span class="metric-status-badge is-status-${item.key}">${escapeHtml(item.label)} ${item.count}</span>`)
         .join("")
     : '<span class="metric-status-badge is-status-empty">暂无指标</span>';
+  const visibleMetrics = group.metrics.slice(0, 4);
+  const hiddenMetrics = group.metrics.slice(4);
   const metricRows = group.metrics.length
-    ? group.metrics
-        .map((metric) => {
-          const current = metric.current || "待填当前值";
-          const target = metric.target || "未设目标";
-          return `
-            <article class="project-metric-row is-status-${metric.status.key}">
-              <div class="project-metric-title">
-                <span class="metric-status-dot is-status-${metric.status.key}"></span>
-                <strong>${escapeHtml(metric.name)}</strong>
-              </div>
-              <div class="project-metric-values">
-                <span><b>${escapeHtml(current)}</b><small>当前</small></span>
-                <span><b>${escapeHtml(target)}</b><small>目标</small></span>
-              </div>
-              <p>${escapeHtml(metric.observation || "未维护计算口径")}</p>
-            </article>
-          `;
-        })
-        .join("")
+    ? `
+      ${visibleMetrics.map(renderProjectMetricRow).join("")}
+      ${
+        hiddenMetrics.length
+          ? `
+            <details class="metric-more">
+              <summary>展开其余 ${hiddenMetrics.length} 项指标</summary>
+              <div>${hiddenMetrics.map(renderProjectMetricRow).join("")}</div>
+            </details>
+          `
+          : ""
+      }
+    `
     : '<div class="metric-empty-project">最新指标表未配置结构化指标</div>';
   return `
     <article class="metric-project-card is-status-${group.leadStatus}" style="--project-color: ${group.color}">
@@ -2586,29 +2641,35 @@ function renderAuthCenter() {
     state.identityManageOpen = false;
     authPanel.innerHTML = `
       <div class="auth-stack login-entry auth-entry-premium">
-        <div class="auth-mark" aria-hidden="true">
-          <span></span>
-          <b></b>
+        <div class="auth-entry-main">
+          <div class="auth-mark" aria-hidden="true">
+            <span></span>
+            <b></b>
+          </div>
+          <div class="auth-copy">
+            <span class="login-status-dot">飞书统一身份</span>
+            <strong>${escapeHtml(authModel.title)}</strong>
+            <p>${escapeHtml(authModel.subtitle)}</p>
+          </div>
+          <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
         </div>
-        <div class="auth-copy">
-          <span class="login-status-dot">飞书统一身份</span>
-          <strong>${escapeHtml(authModel.title)}</strong>
-          <p>${escapeHtml(authModel.subtitle)}</p>
+        <div class="auth-permission-panel">
+          <span>权限范围</span>
+          <div class="auth-permission-grid">
+            ${authModel.permissions
+              .map(
+                (group) => `
+                  <article>
+                    <strong>${escapeHtml(group.label)}</strong>
+                    <div>
+                      ${group.items.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
+                    </div>
+                  </article>
+                `
+              )
+              .join("")}
+          </div>
         </div>
-        <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
-        <div class="auth-permission-grid">
-          ${authModel.permissions
-            .map(
-              (item) => `
-                <article>
-                  <span>${escapeHtml(item.label)}</span>
-                  <small>${escapeHtml(item.value)}</small>
-                </article>
-              `
-            )
-            .join("")}
-        </div>
-        <small class="login-note">${escapeHtml(authModel.notes[0] || "")}</small>
         ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;
@@ -3265,8 +3326,15 @@ function renderReportMilestoneRail() {
     saveButton.textContent = isSavingMilestones ? "保存中..." : "保存";
   }
 
-  const milestones = (state.milestoneManageMode ? ensureMilestoneDraft(project) : getReportMilestones(project)).slice(0, 10);
-  if (!milestones.length) {
+  const activeMilestoneId = getReportMilestone(project)?.id;
+  const allMilestones = state.milestoneManageMode ? ensureMilestoneDraft(project) : getReportMilestones(project);
+  const milestoneState = getVisibleMilestones(allMilestones, {
+    expanded: Boolean(state.expandedProjectMilestones[project.id]),
+    limit: 8,
+    pinnedId: activeMilestoneId,
+  });
+  const milestones = milestoneState.visible;
+  if (!allMilestones.length) {
     container.innerHTML = `
       <div class="empty-state">暂无可维护里程碑</div>
       <button class="secondary-action" type="button" data-add-milestone>新增里程碑</button>
@@ -3274,7 +3342,6 @@ function renderReportMilestoneRail() {
     return;
   }
 
-  const activeMilestoneId = getReportMilestone(project)?.id;
   container.innerHTML =
     milestones
     .map((milestone, index) => {
@@ -3341,7 +3408,12 @@ function renderReportMilestoneRail() {
         </article>
       `;
     })
-    .join("");
+    .join("") +
+    (milestoneState.hiddenCount
+      ? `<button class="milestone-limit-action" type="button" data-toggle-report-milestones="${project.id}">展开其余 ${milestoneState.hiddenCount} 个节点</button>`
+      : milestoneState.isExpanded && allMilestones.length > 8
+        ? `<button class="milestone-limit-action" type="button" data-toggle-report-milestones="${project.id}">收起节点</button>`
+        : "");
   scrollPendingMilestoneEditorIntoView(container);
 }
 
@@ -4207,6 +4279,22 @@ document.addEventListener("click", async (event) => {
   if (detailTab) {
     state.detailTab = detailTab.dataset.detailTab;
     renderDetail();
+    return;
+  }
+
+  const detailMilestoneToggle = event.target.closest("[data-toggle-detail-milestones]");
+  if (detailMilestoneToggle) {
+    const projectId = detailMilestoneToggle.dataset.toggleDetailMilestones;
+    state.expandedProjectMilestones[projectId] = !state.expandedProjectMilestones[projectId];
+    renderDetail();
+    return;
+  }
+
+  const reportMilestoneToggle = event.target.closest("[data-toggle-report-milestones]");
+  if (reportMilestoneToggle) {
+    const projectId = reportMilestoneToggle.dataset.toggleReportMilestones;
+    state.expandedProjectMilestones[projectId] = !state.expandedProjectMilestones[projectId];
+    preserveScrollPosition(() => renderReportMilestoneRail());
     return;
   }
 

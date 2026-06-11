@@ -37,6 +37,26 @@ export function getVisibleCalendarEvents(events, { expanded = false, limit = 3 }
   };
 }
 
+export function getVisibleMilestones(milestones, { expanded = false, limit = 6, pinnedId = "" } = {}) {
+  const source = Array.isArray(milestones) ? milestones : [];
+  const safeLimit = Math.max(1, Number(limit) || 1);
+  if (expanded || source.length <= safeLimit) {
+    return { visible: source, hiddenCount: 0, isExpanded: Boolean(expanded) };
+  }
+
+  const visible = source.slice(0, safeLimit);
+  const pinnedIndex = pinnedId ? source.findIndex((milestone) => milestone?.id === pinnedId) : -1;
+  if (pinnedIndex >= safeLimit) {
+    visible[visible.length - 1] = source[pinnedIndex];
+  }
+
+  return {
+    visible,
+    hiddenCount: source.length - visible.length,
+    isExpanded: false,
+  };
+}
+
 export function getMilestoneReportPreview(
   reports,
   { projectId, milestoneId, expanded = false, limit = 3 } = {}

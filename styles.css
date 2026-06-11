@@ -1521,6 +1521,41 @@ h3 {
   line-height: 1.45;
 }
 
+.timeline-limit-action,
+.milestone-limit-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(91, 110, 132, 0.22);
+  border-radius: 8px;
+  background: rgba(245, 248, 252, 0.78);
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.timeline-limit-action {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.milestone-limit-action {
+  position: relative;
+  z-index: 2;
+  width: calc(100% - 12px);
+  margin: 2px 0 0 6px;
+}
+
+.timeline-limit-action:hover,
+.milestone-limit-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(238, 246, 255, 0.92);
+}
+
 .team-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1997,15 +2032,16 @@ h3 {
 }
 
 .metric-project-board {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  column-count: 2;
+  column-gap: 14px;
 }
 
 .metric-project-card {
   display: grid;
   gap: 12px;
+  break-inside: avoid;
   min-width: 0;
+  margin-bottom: 14px;
   border: 1px solid rgba(208, 219, 232, 0.92);
   border-top: 4px solid var(--project-color, var(--blue));
   border-radius: 10px;
@@ -2100,17 +2136,15 @@ h3 {
 
 .project-metric-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .project-metric-row {
-  display: grid;
-  gap: 8px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--metric-row-color, var(--blue));
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.76);
-  padding: 12px;
+  padding: 0;
 }
 
 .project-metric-row.is-status-achieved {
@@ -2137,11 +2171,21 @@ h3 {
   --metric-row-color: var(--rose);
 }
 
-.project-metric-title {
-  display: flex;
+.project-metric-row summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(74px, 0.34fr) minmax(74px, 0.34fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+}
+
+.project-metric-row summary::-webkit-details-marker,
+.metric-more summary::-webkit-details-marker {
+  display: none;
 }
 
 .metric-status-dot {
@@ -2151,41 +2195,60 @@ h3 {
   border-radius: 999px;
 }
 
-.project-metric-title strong {
+.project-metric-row summary strong {
   overflow: hidden;
   color: var(--ink);
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-metric-values {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.project-metric-values span {
-  min-width: 0;
-  border-radius: 8px;
+.project-metric-value {
+  overflow: hidden;
+  border-radius: 999px;
   background: #f6f9fc;
-  padding: 8px;
-}
-
-.project-metric-values b,
-.project-metric-values small {
-  display: block;
-  overflow: hidden;
+  color: var(--ink-soft);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 820;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-metric-values b {
+.project-metric-value.is-current {
+  background: color-mix(in srgb, var(--metric-row-color, var(--blue)) 9%, #fff);
   color: var(--ink);
-  font-size: 14px;
 }
 
-.project-metric-values small,
-.project-metric-row p,
+.project-metric-row summary em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.project-metric-row[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.project-metric-detail {
+  display: grid;
+  gap: 6px;
+  padding: 9px 12px 11px 30px;
+}
+
+.project-metric-detail span {
+  display: grid;
+  gap: 2px;
+}
+
+.project-metric-detail b {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.project-metric-detail span,
 .metric-empty-project {
   color: var(--muted);
   font-size: 12px;
@@ -2193,15 +2256,32 @@ h3 {
   line-height: 1.5;
 }
 
-.project-metric-row p {
-  margin: 0;
-}
-
 .metric-empty-project {
   border: 1px dashed var(--line-strong);
   border-radius: 10px;
   background: rgba(246, 249, 252, 0.68);
   padding: 14px;
+}
+
+.metric-more {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: rgba(246, 249, 252, 0.72);
+}
+
+.metric-more > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 9px 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 840;
+}
+
+.metric-more > div {
+  display: grid;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .metric-catalog-layout {
@@ -2768,7 +2848,7 @@ h3 {
 }
 
 .register-layout.is-login-only {
-  grid-template-columns: minmax(280px, 440px);
+  grid-template-columns: minmax(720px, 880px);
   justify-content: center;
 }
 
@@ -3145,8 +3225,19 @@ button:disabled {
 
 .auth-entry-premium {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(320px, 1fr);
+  gap: 28px;
+  align-items: stretch;
+  min-height: 380px;
+  padding: 36px;
+}
+
+.auth-entry-main {
+  display: grid;
+  align-content: center;
+  justify-items: start;
   gap: 18px;
-  padding: 30px;
 }
 
 .auth-mark {
@@ -3181,7 +3272,8 @@ button:disabled {
 
 .auth-entry-premium .auth-copy strong {
   color: #fff;
-  font-size: 24px;
+  font-size: 34px;
+  line-height: 1.08;
 }
 
 .auth-entry-premium .auth-copy p,
@@ -3201,30 +3293,56 @@ button:disabled {
   line-height: 1.5;
 }
 
+.auth-permission-panel {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 18px;
+}
+
+.auth-permission-panel > span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 840;
+}
+
 .auth-permission-grid {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
 .auth-permission-grid article {
   display: grid;
-  gap: 4px;
+  gap: 9px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.075);
+  padding: 12px;
 }
 
-.auth-permission-grid span {
+.auth-permission-grid strong {
   color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 820;
 }
 
+.auth-permission-grid article div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
 .auth-permission-grid small {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 11px;
+  border: 1px solid rgba(152, 241, 220, 0.2);
+  border-radius: 999px;
+  background: rgba(152, 241, 220, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  padding: 5px 8px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -3270,7 +3388,8 @@ button:disabled {
 }
 
 .auth-entry-premium .feishu-login-button {
-  min-height: 44px;
+  min-height: 48px;
+  min-width: 190px;
   background: #98f1dc;
   color: #102033;
   box-shadow: none;
@@ -5634,9 +5753,12 @@ button:disabled {
   .metrics-overview-grid,
   .metrics-dashboard-grid,
   .metric-catalog-layout,
-  .metric-project-board,
   .data-health-strip {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric-project-board {
+    column-count: 1;
   }
 
   .data-health-cards {
@@ -5760,7 +5882,7 @@ button:disabled {
   }
 
   .metric-project-board {
-    grid-template-columns: minmax(0, 1fr);
+    column-count: 1;
   }
 
   .metric-catalog-row {
@@ -5884,6 +6006,39 @@ button:disabled {
   .project-row {
     grid-template-columns: 1fr;
     min-height: 0;
+    gap: 9px;
+    padding: 12px 12px 12px 14px;
+    border-radius: 9px;
+  }
+
+  .project-row::before {
+    inset: 10px auto 10px 0;
+  }
+
+  .project-row:hover,
+  .project-row.is-selected {
+    transform: none;
+  }
+
+  .project-name,
+  .project-meta,
+  .project-progress,
+  .project-signal {
+    gap: 4px;
+  }
+
+  .project-name strong {
+    font-size: 15px;
+  }
+
+  .project-meta strong,
+  .project-signal strong {
+    font-size: 13px;
+  }
+
+  .project-hover,
+  .project-actions {
+    display: none;
   }
 
   .calendar-grid {
@@ -5944,6 +6099,72 @@ button:disabled {
   .metric-all-panel,
   .metric-ranking-panel {
     max-width: calc(100vw - 32px);
+  }
+
+  .calendar-panel {
+    overflow-x: visible;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .calendar-page {
+    min-height: 0;
+  }
+
+  .calendar-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: 9px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .calendar-head {
+    display: none;
+  }
+
+  .calendar-day {
+    min-height: 0;
+    border: 1px solid rgba(196, 211, 226, 0.66);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    padding: 10px;
+  }
+
+  .calendar-day:nth-child(7n) {
+    border-right: 1px solid rgba(196, 211, 226, 0.66);
+  }
+
+  .calendar-day.is-muted {
+    display: none;
+  }
+
+  .calendar-date {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 24px;
+    margin-bottom: 7px;
+    border-radius: 999px;
+    background: rgba(239, 245, 251, 0.86);
+    color: var(--ink);
+  }
+
+  .calendar-day-events,
+  .calendar-day.is-expanded .calendar-day-events {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .calendar-event {
+    margin-top: 0;
+    padding: 8px 9px;
   }
 
   .topbar {
@@ -6037,6 +6258,20 @@ button:disabled {
     width: 100%;
   }
 
+  .register-layout.is-login-only {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-entry-premium {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    padding: 24px;
+  }
+
+  .auth-entry-premium .auth-copy strong {
+    font-size: 28px;
+  }
+
   .login-entry {
     min-height: 0;
   }
@@ -6058,13 +6293,20 @@ button:disabled {
     min-height: 82px;
   }
 
-  .metric-project-summary,
-  .project-metric-values {
+  .metric-project-summary {
     grid-template-columns: 1fr;
   }
 
   .metric-project-card {
     padding: 14px;
+  }
+
+  .project-metric-row summary {
+    grid-template-columns: auto minmax(0, 1fr) minmax(54px, 0.28fr) minmax(54px, 0.28fr);
+  }
+
+  .project-metric-row summary em {
+    display: none;
   }
 
   .metric-dashboard-summary strong,
@@ -6193,6 +6435,32 @@ button:disabled {
 
   .milestone-bead {
     padding: 6px 2px 6px 0;
+  }
+
+  .milestone-rail {
+    max-height: 52vh;
+    gap: 8px;
+  }
+
+  .milestone-limit-action,
+  .timeline-limit-action {
+    min-height: 38px;
+    font-size: 12px;
+  }
+
+  .timeline {
+    gap: 7px;
+  }
+
+  .timeline-item {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .timeline-content strong,
+  .timeline-content span {
+    overflow-wrap: anywhere;
   }
 
   .milestone-bead-main {

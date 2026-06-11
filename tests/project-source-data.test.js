@@ -23,7 +23,7 @@ test("project source maintains current business line and owner mapping", () => {
   const projects = readProjectSource();
   const expected = [
     ["【敏捷自助分析平台】项目", "数据", "王有良"],
-    ["【大排档赋值计数】项目", "供应链", "于文超"],
+    ["【大排档赋值台计数】项目", "供应链", "于文超"],
     ["【流程引擎替换OA】项目", "协同办公", "刘长省"],
     ["【智能人事重构】项目", "财务人事", "徐建艇"],
     ["【合同管理系统】项目", "财务人事", "刘召皇"],
@@ -73,7 +73,7 @@ test("project source maintains explicit metric definitions", () => {
   assert.equal(metrics.length, 43);
   assert.equal(metrics[0].projectName, "【合同系统】项目");
   assert.equal(metrics[0].name, "Q2需求完成率");
-  assert.equal(metrics[0].current, "55.5%");
+  assert.equal(metrics[0].current, "55.50%");
   assert.equal(metrics[0].target, "100%");
   assert.equal(metrics[0].observation, "已完成需求数÷Q2需求总数；可观测：当前已可观测");
   assert.ok(
@@ -82,6 +82,14 @@ test("project source maintains explicit metric definitions", () => {
         metric.projectName === "【IPAD自助结账】项目" &&
         metric.name === "年节省人工成本" &&
         metric.target === "2700万元"
+    )
+  );
+  assert.ok(
+    metrics.some(
+      (metric) =>
+        metric.projectName === "【工单调度系统】项目" &&
+        metric.name === "自动化率" &&
+        metric.observation === "自动处理工单÷工单总数；可观测：2026年6月"
     )
   );
   assert.equal(metrics.at(-1).projectName, "【流程引擎替换OA】项目");

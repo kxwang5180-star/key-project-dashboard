@@ -15,11 +15,16 @@ export function buildAuthPanelViewModel({ user = null, projects = [] } = {}) {
       mode: "signed-out",
       title: "进入重点项目驾驶舱",
       subtitle: "使用飞书身份登录后进入项目看板。",
-      notes: ["登录仅读取基础身份；项目群同步只在管理员操作时使用。"],
+      notes: [],
       permissions: [
-        { label: "身份识别", value: "contact:user.base:readonly / auth:user.id:read" },
-        { label: "群聊同步", value: "im:chat:read / im:chat.members:read" },
-        { label: "群提醒", value: "启用里程碑提醒时才需要消息发送权限" },
+        {
+          label: "人员登录",
+          items: ["获取用户身份标识", "获取用户基本信息"],
+        },
+        {
+          label: "王康旭",
+          items: ["查看群信息", "查看群成员", "获取用户身份标识", "获取用户基本信息", "以应用的身份发消息"],
+        },
       ],
       actions: [{ key: "login", label: "飞书登录进入", tone: "primary" }],
       showIdentityManagement: false,
