@@ -4504,6 +4504,7 @@ document.addEventListener("click", async (event) => {
     });
     milestones.push(nextMilestone);
     state.selectedReportMilestoneId = nextMilestone.id;
+    state.pendingMilestoneScrollId = nextMilestone.id;
     state.milestoneManageMode = true;
     refreshMilestoneMaintenanceViews();
     return;
