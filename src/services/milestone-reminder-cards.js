@@ -107,26 +107,7 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     });
   }
 
-  const milestoneIds = items.map((item) => item.milestoneId).filter(Boolean);
-  const markDoneValue = {
-    action: "mark_done",
-    task_id: milestoneIds[0] || "",
-    baseUrl,
-    title,
-    subtitle,
-    template: "green",
-    projectIds: [...new Set(items.map((item) => item.projectId).filter(Boolean))],
-    milestoneIds,
-  };
   const actions = [];
-  if (items.length) {
-    actions.push(button({
-      text: allCompleted ? "已完成 ✅" : "确认完成",
-      type: allCompleted ? "default" : "primary",
-      value: allCompleted ? undefined : markDoneValue,
-      disabled: allCompleted,
-    }));
-  }
   if (projectUrl) {
     actions.push(button({
       text: "去维护",
@@ -135,10 +116,12 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     }));
   }
 
-  elements.push({
-    tag: "action",
-    actions,
-  });
+  if (actions.length) {
+    elements.push({
+      tag: "action",
+      actions,
+    });
+  }
 
   return {
     config: {

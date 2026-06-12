@@ -27,6 +27,7 @@ function parseArgs(argv) {
     sample: argv.includes("--sample"),
     today: argv.includes("--today"),
     fallbackOpen: argv.includes("--fallback-open"),
+    printCard: argv.includes("--print-card"),
     chatId: argv.find((item) => item.startsWith("--chat-id="))?.slice("--chat-id=".length) || "",
     chatName: argv.find((item) => item.startsWith("--chat-name="))?.slice("--chat-name=".length) || "飞书机器人测试群",
     baseUrl: baseUrl || DEFAULT_TEST_BASE_URL,
@@ -218,13 +219,17 @@ async function main() {
 
   const tenantAccessToken = await fetchTenantAccessToken();
   for (const [index, card] of cards.entries()) {
-    await sendFeishuCardMessage({
+    if (args.printCard) {
+      console.log(`[card ${index + 1}/${cards.length}] ${JSON.stringify(card, null, 2)}`);
+    }
+    const result = await sendFeishuCardMessage({
       receiveId: chat.chatId,
       tenantAccessToken,
       card,
       uuid: `test-card-${index}-${Date.now()}`.slice(0, 50),
     });
-    console.log(`测试卡片已发送 ${index + 1}/${cards.length}`);
+    const messageId = result.message_id || result.open_message_id || result.message?.message_id || "";
+    console.log(`测试卡片已发送 ${index + 1}/${cards.length}${messageId ? `，message_id：${messageId}` : ""}`);
   }
 }
 
