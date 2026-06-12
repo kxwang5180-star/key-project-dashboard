@@ -19,10 +19,15 @@ const target = {
   timingLabel: "明日到期",
 };
 
-test("buildMilestoneReminderCard renders Feishu JSON 2.0 interactive card", () => {
+function actionButtons(card) {
+  return card.elements.find((element) => element.tag === "action")?.actions || [];
+}
+
+test("buildMilestoneReminderCard renders Feishu interactive card callback format", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
 
-  assert.equal(card.schema, "2.0");
+  assert.equal(card.schema, undefined);
+  assert.equal(card.config.wide_screen, true);
   assert.equal(card.config.update_multi, true);
   assert.equal("callback" in card.config, false);
   assert.equal(card.header.title.content, "重点项目里程碑提醒");
@@ -30,36 +35,33 @@ test("buildMilestoneReminderCard renders Feishu JSON 2.0 interactive card", () =
   assert.equal(JSON.stringify(card).includes("完成第四批5个用户使用体验优化"), true);
   assert.equal(JSON.stringify(card).includes("业务线：财务"), true);
   assert.equal(JSON.stringify(card).includes("负责人"), false);
-  assert.equal(JSON.stringify(card).includes('"tag":"action"'), false);
+  assert.equal(JSON.stringify(card).includes('"tag":"action"'), true);
 });
 
-test("buildMilestoneReminderCard gives body components stable JSON 2.0 element ids", () => {
+test("buildMilestoneReminderCard uses legacy card text tags accepted by Feishu message update", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
-  const elements = card.body.elements;
-  assert.ok(elements.every((element) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(element.element_id)));
-  const row = elements.find((element) => element.element_id === "row_ms_0");
-  assert.ok(row.columns.every((column) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(column.element_id)));
-  assert.ok(row.columns[0].elements.every((element) => /^[a-z][a-zA-Z0-9_]{0,19}$/.test(element.element_id)));
+  const textBlocks = card.elements.filter((element) => element.tag === "div").map((element) => element.text);
+
+  assert.ok(textBlocks.length >= 3);
+  assert.ok(textBlocks.every((text) => text.tag === "lark_md"));
 });
 
-test("buildMilestoneReminderCard includes open url and callback button behaviors", () => {
+test("buildMilestoneReminderCard includes open url and callback button values", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "http://172.20.180.157/#report" });
-  const actionSet = card.body.elements.at(-1);
-  const row = card.body.elements.find((element) => element.element_id === "row_ms_0");
-  const buttons = actionSet.columns.flatMap((column) => column.elements);
+  const actionSet = card.elements.at(-1);
+  const row = card.elements.find((element) => element.tag === "div" && element.text.content.includes("合同系统"));
+  const buttons = actionButtons(card);
 
-  assert.equal(actionSet.tag, "column_set");
-  assert.equal(row.columns.length, 1);
+  assert.equal(actionSet.tag, "action");
+  assert.equal(row.tag, "div");
   assert.equal(buttons.length, 2);
   assert.equal(buttons[0].text.content, "确认完成");
-  assert.equal(buttons[0].size, "medium");
-  assert.equal(buttons[0].behaviors[0].type, "callback");
-  assert.equal(buttons[0].behaviors[0].value.action, "milestone_reminder_mark_done");
-  assert.deepEqual(buttons[0].behaviors[0].value.milestoneIds, ["m1"]);
+  assert.equal(buttons[0].value.action, "mark_done");
+  assert.equal(buttons[0].value.task_id, "m1");
+  assert.deepEqual(buttons[0].value.milestoneIds, ["m1"]);
+  assert.equal("targets" in buttons[0].value, false);
   assert.equal(buttons[1].text.content, "去维护");
-  assert.equal(buttons[1].size, "medium");
-  assert.equal(buttons[1].behaviors[0].type, "open_url");
-  assert.equal(buttons[1].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
+  assert.equal(buttons[1].url, "http://172.20.180.157/#report:project_1");
   assert.equal(JSON.stringify(card).includes("我已知晓"), false);
   assert.equal(JSON.stringify(card).includes("milestone_reminder_ack"), false);
 });
@@ -69,14 +71,13 @@ test("buildMilestoneReminderCard renders completed callback state", () => {
     baseUrl: "http://172.20.180.157/#report",
     completedMilestoneIds: ["m1"],
   });
-  const actionSet = card.body.elements.at(-1);
-  const buttons = actionSet.columns.flatMap((column) => column.elements);
+  const buttons = actionButtons(card);
 
   assert.equal(card.header.template, "green");
   assert.equal(JSON.stringify(card).includes("状态：已完成 ✅"), true);
   assert.equal(buttons[0].text.content, "已完成 ✅");
   assert.equal(buttons[0].disabled, true);
-  assert.equal(buttons[0].behaviors, undefined);
+  assert.equal(buttons[0].value, undefined);
 });
 
 test("buildMilestoneReminderCallbackResponse accepts Feishu sample mark_done action", () => {
@@ -86,7 +87,7 @@ test("buildMilestoneReminderCallbackResponse accepts Feishu sample mark_done act
     targets: [target],
     baseUrl: "http://172.20.180.157/#report",
   });
-  const buttons = response.card.body.elements.at(-1).columns.flatMap((column) => column.elements);
+  const buttons = actionButtons(response.card);
 
   assert.equal(response.toast.type, "success");
   assert.equal(JSON.stringify(response.card).includes("状态：已完成 ✅"), true);
@@ -103,8 +104,8 @@ test("buildMilestoneReminderCards splits targets into multiple cards", () => {
   const cards = buildMilestoneReminderCards(targets);
 
   assert.equal(cards.length, 2);
-  assert.match(cards[0].header.subtitle.content, /8 个节点/);
-  assert.match(cards[1].header.subtitle.content, /2 个节点/);
+  assert.match(cards[0].elements[0].text.content, /8 个节点/);
+  assert.match(cards[1].elements[0].text.content, /2 个节点/);
 });
 
 test("buildProjectScopedMilestoneReminderCards sends test cards separately by project", () => {

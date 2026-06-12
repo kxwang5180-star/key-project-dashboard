@@ -10,7 +10,12 @@ import {
   resolveFeishuChallengeResponse,
   verifyFeishuCallbackToken,
 } from "../services/feishu-callback-records.js";
-import { isMilestoneDoneAction, markMilestoneReminderDone, normalizeCallbackMilestoneIds } from "../services/feishu-card-callbacks.js";
+import {
+  isMilestoneDoneAction,
+  loadMilestoneReminderTargetsByIds,
+  markMilestoneReminderDone,
+  normalizeCallbackMilestoneIds,
+} from "../services/feishu-card-callbacks.js";
 import { buildMilestoneReminderCallbackResponse } from "../services/milestone-reminder-cards.js";
 import { writeAuditLog } from "../services/audit-log.js";
 
@@ -25,12 +30,33 @@ feishuCallbackRouter.post("/", asyncRoute(async (req, res) => {
   if (!tokenCheck.ok) return res.status(401).json({ message: "invalid verification token" });
 
   const actionValue = getFeishuCardActionValue(payload);
-  const response = buildMilestoneReminderCallbackResponse(actionValue);
   const action = String(actionValue?.action || "").trim();
   const milestoneIds = normalizeCallbackMilestoneIds(actionValue);
+  let response = buildMilestoneReminderCallbackResponse(actionValue);
+  let updatedCount = null;
 
   if (isMilestoneDoneAction(action) && milestoneIds.length) {
-    await markMilestoneReminderDone({ client: prisma, milestoneIds });
+    const targets = Array.isArray(actionValue.targets) && actionValue.targets.length
+      ? actionValue.targets
+      : await loadMilestoneReminderTargetsByIds({ client: prisma, milestoneIds });
+    if (!targets.length) {
+      response = {
+        toast: {
+          type: "warning",
+          content: "未找到匹配里程碑，未更新状态",
+        },
+      };
+    } else {
+      const updateResult = await markMilestoneReminderDone({ client: prisma, milestoneIds });
+      updatedCount = updateResult?.count ?? 0;
+      response = buildMilestoneReminderCallbackResponse({
+        ...actionValue,
+        targets,
+      });
+      if (!updatedCount) {
+        response.toast.content = "里程碑已是完成状态";
+      }
+    }
 
     const messageId = getFeishuCallbackMessageId(payload);
     if (messageId && response.card) {
@@ -47,7 +73,10 @@ feishuCallbackRouter.post("/", asyncRoute(async (req, res) => {
     action: "feishu.card.callback",
     targetType: "FeishuCard",
     targetId: String(payload?.header?.event_id || payload?.event_id || Date.now()),
-    detail: buildFeishuCardCallbackAuditDetail(payload),
+    detail: {
+      ...buildFeishuCardCallbackAuditDetail(payload),
+      updatedCount,
+    },
   });
 
   return res.json(response);

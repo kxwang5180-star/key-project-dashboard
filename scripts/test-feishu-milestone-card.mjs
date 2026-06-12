@@ -24,6 +24,7 @@ function parseArgs(argv) {
   const baseUrl = argv.find((item) => item.startsWith("--base-url="))?.slice("--base-url=".length) || "";
   return {
     send: argv.includes("--send"),
+    sample: argv.includes("--sample"),
     today: argv.includes("--today"),
     fallbackOpen: argv.includes("--fallback-open"),
     chatId: argv.find((item) => item.startsWith("--chat-id="))?.slice("--chat-id=".length) || "",
@@ -201,7 +202,9 @@ async function main() {
   try {
     cards = args.today
       ? await buildTodayMilestoneCards(chat.chatId, args)
-      : [buildSampleCard(chat.chatId, args.baseUrl)];
+      : args.sample
+        ? [buildSampleCard(chat.chatId, args.baseUrl)]
+        : [await buildFallbackOpenMilestoneCard(chat.chatId, args)];
   } catch (error) {
     if (!args.today || !args.fallbackOpen) throw error;
     console.warn(`${error.message}`);
