@@ -180,7 +180,6 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
     schema: "2.0",
     config: {
       update_multi: true,
-      callback: true,
       style: {
         text_size: {
           normal_v2: {

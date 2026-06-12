@@ -23,7 +23,7 @@ test("buildMilestoneReminderCard renders Feishu JSON 2.0 interactive card", () =
 
   assert.equal(card.schema, "2.0");
   assert.equal(card.config.update_multi, true);
-  assert.equal(card.config.callback, true);
+  assert.equal("callback" in card.config, false);
   assert.equal(card.header.title.content, "重点项目里程碑提醒");
   assert.equal(JSON.stringify(card).includes("合同系统"), true);
   assert.equal(JSON.stringify(card).includes("完成第四批5个用户使用体验优化"), true);
