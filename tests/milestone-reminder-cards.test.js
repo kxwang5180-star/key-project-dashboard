@@ -20,43 +20,47 @@ const target = {
 };
 
 function actionButtons(card) {
-  return card.elements.find((element) => element.tag === "action")?.actions || [];
+  const actionSet = card.body.elements.find((element) => element.element_id === "row_actions");
+  return actionSet?.columns?.flatMap((column) => column.elements) || [];
 }
 
-test("buildMilestoneReminderCard renders Feishu interactive card callback format", () => {
+test("buildMilestoneReminderCard renders Feishu JSON 2.0 reminder style", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
 
-  assert.equal(card.schema, undefined);
-  assert.equal(card.config.wide_screen, true);
+  assert.equal(card.schema, "2.0");
   assert.equal(card.config.update_multi, true);
   assert.equal("callback" in card.config, false);
   assert.equal(card.header.title.content, "重点项目里程碑提醒");
+  assert.match(card.header.subtitle.content, /1 个节点/);
   assert.equal(JSON.stringify(card).includes("合同系统"), true);
   assert.equal(JSON.stringify(card).includes("完成第四批5个用户使用体验优化"), true);
   assert.equal(JSON.stringify(card).includes("业务线：财务"), true);
   assert.equal(JSON.stringify(card).includes("负责人"), false);
-  assert.equal(JSON.stringify(card).includes('"tag":"action"'), true);
+  assert.equal(JSON.stringify(card).includes('"tag":"action"'), false);
 });
 
-test("buildMilestoneReminderCard uses legacy card text tags accepted by Feishu message update", () => {
+test("buildMilestoneReminderCard keeps grey milestone blocks from the original card style", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "https://example.com/" });
-  const textBlocks = card.elements.filter((element) => element.tag === "div").map((element) => element.text);
+  const row = card.body.elements.find((element) => element.element_id === "row_ms_0");
 
-  assert.ok(textBlocks.length >= 3);
-  assert.ok(textBlocks.every((text) => text.tag === "lark_md"));
+  assert.equal(row.tag, "column_set");
+  assert.equal(row.background_style, "grey");
+  assert.equal(row.columns.length, 1);
+  assert.ok(row.columns[0].elements.every((element) => element.tag === "markdown"));
 });
 
 test("buildMilestoneReminderCard includes only the maintenance entry button", () => {
   const card = buildMilestoneReminderCard([target], { baseUrl: "http://172.20.180.157/#report" });
-  const actionSet = card.elements.at(-1);
-  const row = card.elements.find((element) => element.tag === "div" && element.text.content.includes("合同系统"));
+  const actionSet = card.body.elements.at(-1);
+  const row = card.body.elements.find((element) => element.element_id === "row_ms_0");
   const buttons = actionButtons(card);
 
-  assert.equal(actionSet.tag, "action");
-  assert.equal(row.tag, "div");
+  assert.equal(actionSet.tag, "column_set");
+  assert.equal(row.tag, "column_set");
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].text.content, "去维护");
-  assert.equal(buttons[0].url, "http://172.20.180.157/#report:project_1");
+  assert.equal(buttons[0].behaviors[0].type, "open_url");
+  assert.equal(buttons[0].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
   assert.equal(JSON.stringify(card).includes("确认完成"), false);
   assert.equal(JSON.stringify(card).includes("mark_done"), false);
   assert.equal(JSON.stringify(card).includes("我已知晓"), false);
@@ -76,7 +80,7 @@ test("buildMilestoneReminderCard renders completed callback state", () => {
   assert.equal(buttons[0].text.content, "去维护");
   assert.equal(JSON.stringify(card).includes("确认完成"), false);
   assert.notEqual(buttons[0].text.content, "已完成 ✅");
-  assert.equal(buttons[0].value, undefined);
+  assert.equal(buttons[0].behaviors[0].type, "open_url");
 });
 
 test("buildMilestoneReminderCallbackResponse accepts Feishu sample mark_done action", () => {
@@ -103,8 +107,8 @@ test("buildMilestoneReminderCards splits targets into multiple cards", () => {
   const cards = buildMilestoneReminderCards(targets);
 
   assert.equal(cards.length, 2);
-  assert.match(cards[0].elements[0].text.content, /8 个节点/);
-  assert.match(cards[1].elements[0].text.content, /2 个节点/);
+  assert.match(cards[0].header.subtitle.content, /8 个节点/);
+  assert.match(cards[1].header.subtitle.content, /2 个节点/);
 });
 
 test("buildProjectScopedMilestoneReminderCards sends test cards separately by project", () => {
