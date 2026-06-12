@@ -11,6 +11,12 @@ import {
   getMilestoneReminderWindow,
   groupMilestoneReminderTargets,
 } from "../src/services/milestone-reminders.js";
+import {
+  filterProjectsByReminderKeywords,
+  parseMilestoneReminderArgs,
+  resolveReminderReceiveId,
+  shouldWriteReminderSentLogs,
+} from "../src/services/milestone-reminder-preview.js";
 
 function dateFromKey(dateKey) {
   return new Date(`${dateKey}T00:00:00.000Z`);
@@ -18,22 +24,6 @@ function dateFromKey(dateKey) {
 
 function localDateKeyToUtcStart(dateKey, timezoneOffsetMinutes) {
   return new Date(dateFromKey(dateKey).getTime() - timezoneOffsetMinutes * 60 * 1000);
-}
-
-function parseArgs(argv) {
-  return {
-    send: argv.includes("--send"),
-    text: argv.includes("--text"),
-    includeSent: argv.includes("--include-sent"),
-    now: argv.find((item) => item.startsWith("--now="))?.slice("--now=".length) || "",
-    maxChars: Number(argv.find((item) => item.startsWith("--max-chars="))?.slice("--max-chars=".length) || 3200),
-    baseUrl: argv.find((item) => item.startsWith("--base-url="))?.slice("--base-url=".length) || process.env.PUBLIC_BASE_URL || "",
-    timezoneOffsetMinutes: Number(
-      argv.find((item) => item.startsWith("--timezone-offset-minutes="))?.slice("--timezone-offset-minutes=".length) ||
-        process.env.MILESTONE_REMINDER_TIMEZONE_OFFSET_MINUTES ||
-        480
-    ),
-  };
 }
 
 async function loadProjectsForReminder(now, options = {}) {
@@ -68,6 +58,21 @@ async function loadProjectsForReminder(now, options = {}) {
         },
       },
     },
+  });
+}
+
+async function findPreviewChat(args) {
+  if (args.previewChatId) {
+    return prisma.feishuChat.findUnique({
+      where: { chatId: args.previewChatId },
+      select: { chatId: true, name: true },
+    });
+  }
+  if (!args.previewChatName) return null;
+  return prisma.feishuChat.findFirst({
+    where: { name: { contains: args.previewChatName } },
+    orderBy: [{ lastSyncedAt: "desc" }, { name: "asc" }],
+    select: { chatId: true, name: true },
   });
 }
 
@@ -115,14 +120,25 @@ async function markTargetsSent(targets) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseMilestoneReminderArgs(process.argv.slice(2));
   const now = args.now ? new Date(args.now) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error("--now 必须是有效日期");
   if (!Number.isFinite(args.timezoneOffsetMinutes)) throw new Error("--timezone-offset-minutes 必须是数字");
   if (!Number.isFinite(args.maxChars) || args.maxChars < 500) throw new Error("--max-chars 必须是不小于 500 的数字");
+  const previewChat = await findPreviewChat(args);
+  if ((args.previewChatId || args.previewChatName) && !previewChat) {
+    throw new Error(`未找到预览测试群：${args.previewChatId || args.previewChatName}`);
+  }
+  if (previewChat) {
+    args.previewChatId = previewChat.chatId;
+    console.log(`预览模式：真实提醒卡片将发送到测试群「${previewChat.name}」(${previewChat.chatId})，不会写入已发送记录`);
+  }
 
   const reminderOptions = { timezoneOffsetMinutes: args.timezoneOffsetMinutes };
-  const projects = await loadProjectsForReminder(now, reminderOptions);
+  const projects = filterProjectsByReminderKeywords(
+    await loadProjectsForReminder(now, reminderOptions),
+    args.projectKeywords
+  );
   const rawTargets = buildMilestoneReminderTargets(projects, now, reminderOptions);
   const targets = args.includeSent ? rawTargets : await filterAlreadySentTargets(rawTargets, now, reminderOptions);
   const grouped = groupMilestoneReminderTargets(targets);
@@ -135,6 +151,7 @@ async function main() {
 
   const failures = [];
   for (const [chatId, chatTargets] of grouped.entries()) {
+    const receiveId = resolveReminderReceiveId(chatId, args);
     const payloads = args.text
       ? buildMilestoneReminderMessages(chatTargets, { maxChars: args.maxChars }).map((text) => ({ type: "text", text }))
       : buildMilestoneReminderCards(chatTargets, { baseUrl: args.baseUrl }).map((card) => ({ type: "card", card }));
@@ -142,26 +159,26 @@ async function main() {
       if (args.send) {
         try {
           if (payload.type === "text") {
-            await sendFeishuTextMessage({ receiveId: chatId, text: payload.text, tenantAccessToken });
+            await sendFeishuTextMessage({ receiveId, text: payload.text, tenantAccessToken });
           } else {
             await sendFeishuCardMessage({
-              receiveId: chatId,
+              receiveId,
               card: payload.card,
               tenantAccessToken,
-              uuid: buildMessageUuid(chatTargets, index),
+              uuid: previewChat ? `preview-${Date.now()}-${index}` : buildMessageUuid(chatTargets, index),
             });
           }
-          console.log(`已发送第 ${index + 1}/${payloads.length} 段里程碑提醒到 ${chatId}`);
+          console.log(`已发送第 ${index + 1}/${payloads.length} 段里程碑提醒到 ${receiveId}${previewChat ? `（原项目群：${chatId}）` : ""}`);
         } catch (error) {
-          failures.push({ chatId, message: error.message });
-          console.error(`发送到 ${chatId} 失败：${error.message}`);
+          failures.push({ chatId: receiveId, message: error.message });
+          console.error(`发送到 ${receiveId} 失败：${error.message}`);
           continue;
         }
       } else {
-        console.log(`[dry-run] ${chatId} ${index + 1}/${payloads.length}\n${JSON.stringify(payload.card || { text: payload.text }, null, 2)}\n`);
+        console.log(`[dry-run] ${receiveId}${previewChat ? `（原项目群：${chatId}）` : ""} ${index + 1}/${payloads.length}\n${JSON.stringify(payload.card || { text: payload.text }, null, 2)}\n`);
       }
     }
-    if (args.send && !failures.some((failure) => failure.chatId === chatId)) {
+    if (shouldWriteReminderSentLogs(args) && !failures.some((failure) => failure.chatId === chatId)) {
       await markTargetsSent(chatTargets);
     }
   }

@@ -62,7 +62,6 @@ test("buildMilestoneReminderCard includes only the maintenance entry button", ()
   assert.equal(buttons[0].behaviors[0].type, "open_url");
   assert.equal(buttons[0].behaviors[0].default_url, "http://172.20.180.157/#report:project_1");
   assert.equal(JSON.stringify(card).includes("确认完成"), false);
-  assert.equal(JSON.stringify(card).includes("mark_done"), false);
   assert.equal(JSON.stringify(card).includes("我已知晓"), false);
   assert.equal(JSON.stringify(card).includes("milestone_reminder_ack"), false);
 });

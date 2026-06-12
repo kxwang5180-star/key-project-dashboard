@@ -1,4 +1,4 @@
-import { getMetricTargetStatus, parseMetricNumber } from "./metric-status.js";
+import { getMetricTargetStatus } from "./metric-status.js";
 
 const STATUS_LABELS = {
   achieved: "已达成",
@@ -10,7 +10,21 @@ const STATUS_LABELS = {
 };
 
 const STATUS_ORDER = ["achieved", "in-progress", "tracking", "goal", "observing", "empty"];
-const ACTION_STATUS_ORDER = ["in-progress", "goal", "tracking", "observing", "empty", "achieved"];
+const DASHBOARD_STATUS_LABELS = {
+  "in-progress": "推进中",
+  "needs-attention": "待完善",
+  achieved: "已达成",
+};
+const DASHBOARD_STATUS_ORDER = ["in-progress", "needs-attention", "achieved"];
+const ACTION_STATUS_ORDER = ["in-progress", "tracking", "goal", "observing", "empty", "achieved"];
+
+function toDashboardStatus(statusKey) {
+  if (statusKey === "achieved") return { key: "achieved", label: DASHBOARD_STATUS_LABELS.achieved };
+  if (statusKey === "in-progress" || statusKey === "tracking") {
+    return { key: "in-progress", label: DASHBOARD_STATUS_LABELS["in-progress"] };
+  }
+  return { key: "needs-attention", label: DASHBOARD_STATUS_LABELS["needs-attention"] };
+}
 
 function getActionRank(record) {
   const rank = ACTION_STATUS_ORDER.indexOf(record.status.key);
@@ -19,7 +33,6 @@ function getActionRank(record) {
 
 function toMetricRecord(project, metric, index) {
   const status = getMetricTargetStatus(metric);
-  const currentNumber = parseMetricNumber(metric.current);
   const progress = status.progress;
   return {
     id: `${project.id}:${metric.id || index}`,
@@ -33,17 +46,17 @@ function toMetricRecord(project, metric, index) {
     observation: metric.observation || "",
     history: Array.isArray(metric.history) ? metric.history : [],
     status,
+    dashboardStatus: toDashboardStatus(status.key),
     progress,
-    currentNumber,
   };
 }
 
 function buildStatusSlices(records) {
-  return STATUS_ORDER
+  return DASHBOARD_STATUS_ORDER
     .map((key) => ({
       key,
-      label: STATUS_LABELS[key],
-      count: records.filter((record) => record.status.key === key).length,
+      label: DASHBOARD_STATUS_LABELS[key],
+      count: records.filter((record) => record.dashboardStatus.key === key).length,
     }))
     .filter((slice) => slice.count > 0);
 }
@@ -56,24 +69,6 @@ function buildBusinessLineSlices(records) {
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
-}
-
-function buildTrendSeries(records) {
-  const points = records
-    .flatMap((record) =>
-      record.history.map((item) => ({
-        date: String(item.date || "").trim(),
-        value: parseMetricNumber(item.value),
-      }))
-    )
-    .filter((point) => point.date && point.value !== null)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  return points.map((point) => ({
-    date: point.date,
-    label: point.date.slice(5).replace("-", "/"),
-    value: Math.round(point.value),
-  }));
 }
 
 function buildMetricGroups(records) {
@@ -106,11 +101,18 @@ function buildMetricGroups(records) {
 }
 
 function buildActionGroups(records) {
-  return ACTION_STATUS_ORDER
+  return DASHBOARD_STATUS_ORDER
     .map((key) => ({
       key,
-      label: STATUS_LABELS[key],
-      count: records.filter((record) => record.status.key === key).length,
+      label: DASHBOARD_STATUS_LABELS[key],
+      count: records.filter((record) => record.dashboardStatus.key === key).length,
+      details: STATUS_ORDER
+        .map((statusKey) => ({
+          key: statusKey,
+          label: STATUS_LABELS[statusKey],
+          count: records.filter((record) => record.dashboardStatus.key === key && record.status.key === statusKey).length,
+        }))
+        .filter((item) => item.count > 0),
     }))
     .filter((group) => group.count > 0);
 }
@@ -120,17 +122,22 @@ function buildProjectGroups(projects, records) {
     .map((project) => {
       const metrics = records.filter((record) => record.projectId === project.id);
       const statusCounts = STATUS_ORDER
-        .map((key) => ({
-          key,
-          label: STATUS_LABELS[key],
-          count: metrics.filter((record) => record.status.key === key).length,
-        }))
-        .filter((item) => item.count > 0);
+        .reduce((counts, key) => {
+          const dashboardStatus = toDashboardStatus(key);
+          const count = metrics.filter((record) => record.status.key === key).length;
+          if (!count) return counts;
+          const existing = counts.find((item) => item.key === dashboardStatus.key);
+          if (existing) existing.count += count;
+          else counts.push({ ...dashboardStatus, count });
+          return counts;
+        }, [])
+        .sort((a, b) => DASHBOARD_STATUS_ORDER.indexOf(a.key) - DASHBOARD_STATUS_ORDER.indexOf(b.key))
       const currentCount = metrics.filter((record) => record.status.hasCurrent).length;
       const targetCount = metrics.filter((record) => record.status.hasTarget).length;
-      const leadStatus = metrics
+      const leadRecord = metrics
         .slice()
-        .sort((a, b) => getActionRank(a) - getActionRank(b))[0]?.status.key || "empty";
+        .sort((a, b) => getActionRank(a) - getActionRank(b))[0];
+      const leadStatus = leadRecord?.dashboardStatus.key || "empty";
 
       return {
         projectId: project.id,
@@ -162,7 +169,8 @@ export function buildMetricDashboardModel(projects, getMetricItems) {
   const targetedCount = records.filter((record) => record.status.hasTarget).length;
   const currentCount = records.filter((record) => record.status.hasCurrent).length;
   const achievedCount = records.filter((record) => record.status.key === "achieved").length;
-  const inProgressCount = records.filter((record) => record.status.key === "in-progress").length;
+  const inProgressCount = records.filter((record) => record.dashboardStatus.key === "in-progress").length;
+  const needsAttentionCount = records.filter((record) => record.dashboardStatus.key === "needs-attention").length;
   const goalOnlyCount = records.filter((record) => record.status.key === "goal").length;
   const readiness = records.length ? Math.round((currentCount / records.length) * 100) : 0;
 
@@ -175,16 +183,12 @@ export function buildMetricDashboardModel(projects, getMetricItems) {
       currentCount,
       achievedCount,
       inProgressCount,
+      needsAttentionCount,
       goalOnlyCount,
       readiness,
     },
     statusSlices: buildStatusSlices(records),
     businessLineSlices: buildBusinessLineSlices(records),
-    topMetrics: records
-      .filter((record) => record.progress !== null)
-      .sort((a, b) => b.progress - a.progress || (b.currentNumber || 0) - (a.currentNumber || 0) || a.name.localeCompare(b.name, "zh-CN"))
-      .slice(0, 8),
-    trendSeries: buildTrendSeries(records).slice(-12),
     metricGroups: buildMetricGroups(records),
     actionGroups: buildActionGroups(records),
     projectGroups: buildProjectGroups(projects, records),

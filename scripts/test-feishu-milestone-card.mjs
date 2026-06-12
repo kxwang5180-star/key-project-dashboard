@@ -1,10 +1,13 @@
 import { prisma } from "../src/lib/prisma.js";
-import { fetchTenantAccessToken, sendFeishuCardMessage } from "../src/lib/feishu.js";
 import {
   buildMilestoneReminderCard,
   buildProjectScopedMilestoneReminderCards,
 } from "../src/services/milestone-reminder-cards.js";
-import { sortMilestoneReminderTargets } from "../src/services/milestone-reminders.js";
+import {
+  buildMilestoneReminderTargets,
+  getMilestoneReminderDateRange,
+  sortMilestoneReminderTargets,
+} from "../src/services/milestone-reminders.js";
 
 const DEFAULT_TODAY_PROJECT_KEYWORDS = ["飞书测试"];
 const DEFAULT_TEST_BASE_URL = "http://172.20.180.157/#report";
@@ -25,8 +28,6 @@ function parseArgs(argv) {
   return {
     send: argv.includes("--send"),
     sample: argv.includes("--sample"),
-    today: argv.includes("--today"),
-    fallbackOpen: argv.includes("--fallback-open"),
     printCard: argv.includes("--print-card"),
     chatId: argv.find((item) => item.startsWith("--chat-id="))?.slice("--chat-id=".length) || "",
     chatName: argv.find((item) => item.startsWith("--chat-name="))?.slice("--chat-name=".length) || "飞书机器人测试群",
@@ -69,66 +70,17 @@ function buildSampleCard(chatId, baseUrl) {
     ],
     {
       baseUrl,
-      title: "飞书机器人测试提醒",
-      subtitle: "1 个测试节点",
-      template: "blue",
+      title: "重点项目里程碑提醒",
+      subtitle: "1 个节点需要关注",
+      template: "orange",
     }
   );
 }
 
-async function buildFallbackOpenMilestoneCard(chatId, args) {
-  const milestone = await prisma.milestone.findFirst({
-    where: {
-      status: { not: "COMPLETED" },
-      project: {
-        isKeyProject: true,
-      },
-    },
-    orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      dueDate: true,
-      project: {
-        select: {
-          id: true,
-          name: true,
-          shortName: true,
-          businessLine: true,
-        },
-      },
-    },
-  });
-  if (!milestone) {
-    throw new Error("未找到可用于回调测试的未完成里程碑");
-  }
-  const dueDate = milestone.dueDate ? dateKeyInTimezone(milestone.dueDate) : args.dateKey;
-  return buildMilestoneReminderCard(
-    [
-      {
-        chatId,
-        projectId: milestone.project.id,
-        projectName: milestone.project.shortName || milestone.project.name,
-        businessLine: milestone.project.businessLine,
-        milestoneId: milestone.id,
-        milestoneTitle: milestone.title,
-        dueDate,
-        timing: "today",
-        timingLabel: "回调测试",
-      },
-    ],
-    {
-      baseUrl: args.baseUrl,
-      title: "重点项目里程碑回调测试",
-      subtitle: "1 个真实节点，点击确认完成会写入数据库",
-      template: "blue",
-    }
-  );
-}
-
-async function buildTodayMilestoneCards(chatId, args) {
-  const dateStart = new Date(`${args.dateKey}T00:00:00.000Z`);
-  const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
+async function buildReminderWindowMilestoneCards(chatId, args) {
+  const now = new Date(`${args.dateKey}T00:00:00.000Z`);
+  const { minDate, maxDate } = getMilestoneReminderDateRange(now);
+  if (!minDate || !maxDate) return [];
   const projects = await prisma.project.findMany({
     where: {
       OR: args.projectKeywords.flatMap((keyword) => [
@@ -137,7 +89,7 @@ async function buildTodayMilestoneCards(chatId, args) {
       ]),
       milestones: {
         some: {
-          dueDate: { gte: dateStart, lt: dateEnd },
+          dueDate: { gte: minDate, lte: maxDate },
         },
       },
     },
@@ -146,9 +98,10 @@ async function buildTodayMilestoneCards(chatId, args) {
       name: true,
       shortName: true,
       businessLine: true,
+      feishuChatId: true,
       milestones: {
         where: {
-          dueDate: { gte: dateStart, lt: dateEnd },
+          dueDate: { gte: minDate, lte: maxDate },
         },
         orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
         select: {
@@ -160,23 +113,14 @@ async function buildTodayMilestoneCards(chatId, args) {
       },
     },
   });
-  const targets = sortMilestoneReminderTargets(projects.flatMap((project) =>
-    project.milestones.map((milestone) => ({
-      chatId,
-      projectId: project.id,
-      projectName: project.shortName || project.name,
-      businessLine: project.businessLine,
-      milestoneId: milestone.id,
-      milestoneTitle: milestone.title,
-      dueDate: args.dateKey,
-      timing: "today",
-      timingLabel: "今日到期",
-    }))
-  ));
+  const targets = buildMilestoneReminderTargets(projects.map((project) => ({
+    ...project,
+    feishuChatId: chatId,
+  })), now);
   if (!targets.length) {
-    throw new Error(`${args.dateKey} 未找到匹配项目的到期里程碑：${args.projectKeywords.join("、")}`);
+    throw new Error(`${args.dateKey} 未找到匹配项目在今日/明日提醒窗口内的未完成里程碑：${args.projectKeywords.join("、")}`);
   }
-  return buildProjectScopedMilestoneReminderCards(targets, {
+  return buildProjectScopedMilestoneReminderCards(sortMilestoneReminderTargets(targets), {
     baseUrl: args.baseUrl,
     title: "重点项目里程碑提醒",
     template: "orange",
@@ -199,24 +143,15 @@ async function main() {
     console.log(`成员预览：${chat.members.map((member) => member.name).filter(Boolean).slice(0, 10).join("、")}`);
   }
 
-  let cards;
-  try {
-    cards = args.today
-      ? await buildTodayMilestoneCards(chat.chatId, args)
-      : args.sample
-        ? [buildSampleCard(chat.chatId, args.baseUrl)]
-        : [await buildFallbackOpenMilestoneCard(chat.chatId, args)];
-  } catch (error) {
-    if (!args.today || !args.fallbackOpen) throw error;
-    console.warn(`${error.message}`);
-    console.warn("改发一个数据库中未完成里程碑的回调测试卡片。");
-    cards = [await buildFallbackOpenMilestoneCard(chat.chatId, args)];
-  }
+  const cards = args.sample
+    ? [buildSampleCard(chat.chatId, args.baseUrl)]
+    : await buildReminderWindowMilestoneCards(chat.chatId, args);
   if (!args.send) {
     console.log(JSON.stringify(cards, null, 2));
     return;
   }
 
+  const { fetchTenantAccessToken, sendFeishuCardMessage } = await import("../src/lib/feishu.js");
   const tenantAccessToken = await fetchTenantAccessToken();
   for (const [index, card] of cards.entries()) {
     if (args.printCard) {

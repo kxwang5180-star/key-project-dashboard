@@ -43,14 +43,14 @@ test("buildMetricDashboardModel summarizes metric status and readiness", () => {
   assert.deepEqual(
     model.statusSlices.map((slice) => [slice.key, slice.count]),
     [
-      ["achieved", 3],
       ["in-progress", 1],
-      ["goal", 1],
+      ["needs-attention", 1],
+      ["achieved", 3],
     ]
   );
 });
 
-test("buildMetricDashboardModel builds business line slices, top metrics, and trend series", () => {
+test("buildMetricDashboardModel builds business line slices without ranking or global trend widgets", () => {
   const model = buildMetricDashboardModel(projects, (project) => metricMap[project.id] || []);
 
   assert.deepEqual(
@@ -61,20 +61,8 @@ test("buildMetricDashboardModel builds business line slices, top metrics, and tr
       ["协同办公", 1],
     ]
   );
-  assert.deepEqual(
-    model.topMetrics.slice(0, 3).map((metric) => [metric.projectName, metric.name, metric.progress]),
-    [
-      ["合同系统", "问题完成进度", 100],
-      ["门店大脑", "客群标签精度", 100],
-      ["流程引擎", "审批自动化执行成功率", 100],
-    ]
-  );
-  assert.deepEqual(model.trendSeries[0], {
-    date: "2026-06-01",
-    label: "06/01",
-    value: 55,
-  });
-  assert.equal(model.trendSeries.at(-1).value, 74);
+  assert.equal("topMetrics" in model, false);
+  assert.equal("trendSeries" in model, false);
 });
 
 test("buildMetricDashboardModel groups every metric by business line with actionable order", () => {
@@ -100,10 +88,11 @@ test("buildMetricDashboardModel groups every metric by business line with action
     model.actionGroups.map((group) => [group.key, group.count]),
     [
       ["in-progress", 1],
-      ["goal", 1],
+      ["needs-attention", 1],
       ["achieved", 3],
     ]
   );
+  assert.deepEqual(model.actionGroups[1].details.map((item) => [item.key, item.count]), [["goal", 1]]);
 });
 
 test("buildMetricDashboardModel groups metrics by project and keeps empty projects visible", () => {
