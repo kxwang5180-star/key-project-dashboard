@@ -1,9 +1,14 @@
 import { prisma } from "../lib/prisma.js";
 
 export function normalizeCallbackMilestoneIds(value = {}) {
-  return Array.isArray(value?.milestoneIds)
-    ? value.milestoneIds.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
+  const source = Array.isArray(value?.milestoneIds)
+    ? value.milestoneIds
+    : [value?.task_id || value?.taskId || value?.milestoneId];
+  return source.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+export function isMilestoneDoneAction(action) {
+  return ["milestone_reminder_mark_done", "mark_done"].includes(String(action || "").trim());
 }
 
 export async function markMilestoneReminderDone({ client = prisma, milestoneIds = [] } = {}) {

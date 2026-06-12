@@ -1,4 +1,5 @@
 import { buildProjectMaintenanceHash } from "../ui/project-links.js";
+import { isMilestoneDoneAction, normalizeCallbackMilestoneIds } from "./feishu-card-callbacks.js";
 
 const CARD_MAX_TARGETS = 8;
 
@@ -226,7 +227,7 @@ export function buildProjectScopedMilestoneReminderCards(targets = [], options =
 
 export function buildMilestoneReminderCallbackResponse(value = {}) {
   const action = String(value?.action || "").trim();
-  if (action !== "milestone_reminder_mark_done") {
+  if (!isMilestoneDoneAction(action)) {
     return {
       toast: {
         type: "warning",
@@ -244,7 +245,7 @@ export function buildMilestoneReminderCallbackResponse(value = {}) {
       title: value.title || "重点项目里程碑提醒",
       subtitle: value.subtitle || `${Array.isArray(value.targets) ? value.targets.length : 0} 个节点需要关注`,
       template: value.template || "green",
-      completedMilestoneIds: value.milestoneIds || [],
+      completedMilestoneIds: normalizeCallbackMilestoneIds(value),
     }),
   };
 }

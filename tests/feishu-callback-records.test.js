@@ -47,6 +47,16 @@ test("getFeishuCardActionValue reads new card callback structure", () => {
   assert.deepEqual(getFeishuCardActionValue(payload), { action: "milestone_reminder_mark_done", milestoneIds: ["m1"] });
 });
 
+test("getFeishuCardActionValue parses stringified callback values", () => {
+  const payload = {
+    action: {
+      value: JSON.stringify({ action: "mark_done", task_id: "m1" }),
+    },
+  };
+
+  assert.deepEqual(getFeishuCardActionValue(payload), { action: "mark_done", task_id: "m1" });
+});
+
 test("getFeishuCallbackMessageId reads card callback message ids", () => {
   assert.equal(
     getFeishuCallbackMessageId({
@@ -69,9 +79,9 @@ test("buildFeishuCardCallbackAuditDetail keeps callback audit compact", () => {
       context: { open_chat_id: "oc_1", open_message_id: "om_1" },
       action: {
         value: {
-          action: "milestone_reminder_mark_done",
+          action: "mark_done",
           projectIds: ["p1"],
-          milestoneIds: ["m1"],
+          task_id: "m1",
         },
       },
     },
@@ -79,7 +89,7 @@ test("buildFeishuCardCallbackAuditDetail keeps callback audit compact", () => {
 
   assert.deepEqual(detail, {
     eventId: "evt_1",
-    action: "milestone_reminder_mark_done",
+    action: "mark_done",
     chatId: "oc_1",
     messageId: "om_1",
     operatorOpenId: "ou_1",

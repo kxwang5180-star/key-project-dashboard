@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildMilestoneReminderCard,
   buildMilestoneReminderCards,
+  buildMilestoneReminderCallbackResponse,
   buildProjectScopedMilestoneReminderCards,
 } from "../src/services/milestone-reminder-cards.js";
 
@@ -76,6 +77,21 @@ test("buildMilestoneReminderCard renders completed callback state", () => {
   assert.equal(buttons[0].text.content, "已完成 ✅");
   assert.equal(buttons[0].disabled, true);
   assert.equal(buttons[0].behaviors, undefined);
+});
+
+test("buildMilestoneReminderCallbackResponse accepts Feishu sample mark_done action", () => {
+  const response = buildMilestoneReminderCallbackResponse({
+    action: "mark_done",
+    task_id: "m1",
+    targets: [target],
+    baseUrl: "http://172.20.180.157/#report",
+  });
+  const buttons = response.card.body.elements.at(-1).columns.flatMap((column) => column.elements);
+
+  assert.equal(response.toast.type, "success");
+  assert.equal(JSON.stringify(response.card).includes("状态：已完成 ✅"), true);
+  assert.equal(buttons[0].text.content, "已完成 ✅");
+  assert.equal(buttons[0].disabled, true);
 });
 
 test("buildMilestoneReminderCards splits targets into multiple cards", () => {

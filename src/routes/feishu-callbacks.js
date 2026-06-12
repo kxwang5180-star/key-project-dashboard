@@ -10,7 +10,7 @@ import {
   resolveFeishuChallengeResponse,
   verifyFeishuCallbackToken,
 } from "../services/feishu-callback-records.js";
-import { markMilestoneReminderDone, normalizeCallbackMilestoneIds } from "../services/feishu-card-callbacks.js";
+import { isMilestoneDoneAction, markMilestoneReminderDone, normalizeCallbackMilestoneIds } from "../services/feishu-card-callbacks.js";
 import { buildMilestoneReminderCallbackResponse } from "../services/milestone-reminder-cards.js";
 import { writeAuditLog } from "../services/audit-log.js";
 
@@ -29,7 +29,7 @@ feishuCallbackRouter.post("/", asyncRoute(async (req, res) => {
   const action = String(actionValue?.action || "").trim();
   const milestoneIds = normalizeCallbackMilestoneIds(actionValue);
 
-  if (action === "milestone_reminder_mark_done" && milestoneIds.length) {
+  if (isMilestoneDoneAction(action) && milestoneIds.length) {
     await markMilestoneReminderDone({ client: prisma, milestoneIds });
 
     const messageId = getFeishuCallbackMessageId(payload);

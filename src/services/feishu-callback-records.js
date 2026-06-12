@@ -23,7 +23,14 @@ export function verifyFeishuCallbackToken(payload = {}, expectedToken = "") {
 }
 
 export function getFeishuCardActionValue(payload = {}) {
-  return payload?.event?.action?.value || payload?.action?.value || {};
+  const value = payload?.event?.action?.value || payload?.action?.value || {};
+  if (typeof value !== "string") return value || {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function getFeishuCallbackMessageId(payload = {}) {
@@ -47,6 +54,6 @@ export function buildFeishuCardCallbackAuditDetail(payload = {}) {
     messageId: getFeishuCallbackMessageId(payload) || null,
     operatorOpenId: String(payload?.event?.operator?.open_id || payload?.operator?.open_id || "").trim() || null,
     projectIds: Array.isArray(value?.projectIds) ? value.projectIds : [],
-    milestoneIds: Array.isArray(value?.milestoneIds) ? value.milestoneIds : [],
+    milestoneIds: Array.isArray(value?.milestoneIds) ? value.milestoneIds : [value?.task_id || value?.taskId || value?.milestoneId].filter(Boolean),
   };
 }

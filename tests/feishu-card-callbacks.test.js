@@ -1,13 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  isMilestoneDoneAction,
   markMilestoneReminderDone,
   normalizeCallbackMilestoneIds,
 } from "../src/services/feishu-card-callbacks.js";
 
 test("normalizeCallbackMilestoneIds trims empty callback milestone ids", () => {
   assert.deepEqual(normalizeCallbackMilestoneIds({ milestoneIds: [" m1 ", "", null, "m2"] }), ["m1", "m2"]);
-  assert.deepEqual(normalizeCallbackMilestoneIds({ milestoneIds: "m1" }), []);
+  assert.deepEqual(normalizeCallbackMilestoneIds({ milestoneIds: "m1", task_id: "m3" }), ["m3"]);
+  assert.deepEqual(normalizeCallbackMilestoneIds({ taskId: "m4" }), ["m4"]);
+});
+
+test("isMilestoneDoneAction accepts current and Feishu sample callback actions", () => {
+  assert.equal(isMilestoneDoneAction("milestone_reminder_mark_done"), true);
+  assert.equal(isMilestoneDoneAction("mark_done"), true);
+  assert.equal(isMilestoneDoneAction("other"), false);
 });
 
 test("markMilestoneReminderDone updates unfinished milestones to completed", async () => {
