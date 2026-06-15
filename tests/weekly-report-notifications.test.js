@@ -30,6 +30,9 @@ test("buildWeeklyReportNotificationCard formats project progress as a green Feis
   assert.match(payload, /已完成自助结账链路联调/);
   assert.match(payload, /风险与支持/);
   assert.match(payload, /去查看/);
+  assert.equal(payload.includes("**"), false);
+  assert.match(payload, /● 本周进展：/);
+  assert.match(payload, /● 风险与支持：/);
   assert.equal(card.body.elements.filter((element) => element.background_style === "grey").length, 1);
   assert.match(payload, /#report:project_10/);
 });

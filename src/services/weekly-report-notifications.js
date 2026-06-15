@@ -99,6 +99,11 @@ function infoBlock(lines = [], elementId = "row_info") {
   };
 }
 
+function labeledLine(label, content) {
+  const text = String(content || "").trim() || "暂无";
+  return `● ${label}：${text}`;
+}
+
 export function buildWeeklyReportNotificationText({ project = {}, report = {}, user = {} } = {}) {
   const lines = [
     "【重点项目周度进展】",
@@ -130,10 +135,10 @@ export function buildWeeklyReportNotificationCard({
 
   const elements = [
     infoBlock([
-      `**${compactText(name, 32)}**`,
+      compactText(name, 32),
       `第${weekNumber}周｜提交人：${reporter}${milestoneTitle ? `｜关联里程碑：${compactText(milestoneTitle, 42)}` : ""}`,
-      `**本周进展：**${progress}`,
-      `**风险与支持：**${riskSummary || "暂无"}`,
+      labeledLine("本周进展", progress),
+      labeledLine("风险与支持", riskSummary || "暂无"),
     ], "row_summary"),
   ];
 
