@@ -70,12 +70,31 @@ test("project source maintains explicit milestone schedule", () => {
 test("project source maintains explicit metric definitions", () => {
   const { metrics } = readProjectData();
 
-  assert.equal(metrics.length, 43);
+  assert.equal(metrics.length, 37);
   assert.equal(metrics[0].projectName, "【合同系统】项目");
   assert.equal(metrics[0].name, "Q2需求完成率");
   assert.equal(metrics[0].current, "55.50%");
   assert.equal(metrics[0].target, "100%");
   assert.equal(metrics[0].observation, "已完成需求数÷Q2需求总数；可观测：当前已可观测");
+  assert.ok(
+    metrics.some(
+      (metric) =>
+        metric.projectName === "【合同系统】项目" &&
+        metric.name === "用户满意度8分以上占比" &&
+        metric.current === "41%" &&
+        metric.target === "55%" &&
+        metric.observation === "8分以上用户占比；可观测：Q2结束后问卷调研"
+    )
+  );
+  assert.ok(
+    metrics.some(
+      (metric) =>
+        metric.projectName === "【数字化门迎】项目" &&
+        metric.name === "门迎组薪资成本同比（除美甲师）" &&
+        metric.observation === "门迎组薪资成本；可观测：当前已可观测"
+    )
+  );
+  assert.equal(metrics.some((metric) => metric.projectName === "【智能人事重构】项目"), false);
   assert.ok(
     metrics.some(
       (metric) =>

@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node scripts/seed-from-data.mjs",
+    "metrics:sync": "node scripts/sync-metrics-from-data.mjs",
     "feishu:chat-members": "node scripts/fetch-feishu-chat-members.mjs",
     "feishu:milestone-reminders": "node scripts/send-milestone-reminders.mjs",
     "feishu:milestone-reminders:send": "node scripts/send-milestone-reminders.mjs --send",

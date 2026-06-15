@@ -1,4 +1,4 @@
-export const PROJECT_METRIC_SOURCE_VERSION = "2026-06-observable-metrics-v2";
+export const PROJECT_METRIC_SOURCE_VERSION = "2026-06-latest-metrics-v3";
 
 export function shouldUseSavedMetrics({ savedMetrics, sourceMetricRows = [], metricsSourceVersion = "" } = {}) {
   if (!Array.isArray(savedMetrics)) return false;
