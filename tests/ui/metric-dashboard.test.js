@@ -17,6 +17,7 @@ const metricMap = {
       current: "73.9%",
       target: "100%",
       observation: "已完成需求数 / Q2需求总数",
+      observable: "当前已可观测",
       history: [
         { date: "2026-06-01", value: "55%" },
         { date: "2026-06-11", value: "73.9%" },
@@ -40,6 +41,7 @@ test("buildMetricDashboardModel summarizes metric status and readiness", () => {
   assert.equal(model.summary.achievedCount, 3);
   assert.equal(model.summary.goalOnlyCount, 1);
   assert.equal(model.summary.readiness, 80);
+  assert.equal(model.records[0].observable, "当前已可观测");
   assert.deepEqual(
     model.statusSlices.map((slice) => [slice.key, slice.count]),
     [

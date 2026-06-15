@@ -2250,30 +2250,6 @@ function renderMetrics() {
     .join("");
 }
 
-function renderMetricActionSummary(container, groups, total) {
-  if (!container) return;
-  container.innerHTML = groups.length
-    ? groups
-        .map((group) => {
-          const percent = total ? Math.round((group.count / total) * 100) : 0;
-          const detailText = Array.isArray(group.details) && group.details.length
-            ? group.details.map((item) => `${item.label} ${item.count}`).join(" · ")
-            : "";
-          return `
-            <article class="metric-action-card is-status-${group.key}">
-              <div>
-                <span>${escapeHtml(group.label)}</span>
-                <strong>${group.count}</strong>
-                ${detailText ? `<p>${escapeHtml(detailText)}</p>` : ""}
-              </div>
-              <small>${percent}%</small>
-            </article>
-          `;
-        })
-        .join("")
-    : '<div class="metric-empty-chart">暂无指标状态</div>';
-}
-
 function renderMetricInlineProgress(metric) {
   if (metric.progress === null) return "";
   return `
@@ -2335,29 +2311,6 @@ function formatMetricValue(value) {
 function isEmptyMetricDisplayValue(value) {
   const text = String(value || "").trim();
   return !text || text === "无" || text === "-" || /^(暂无|待填|待补充|待持续观测)$/i.test(text);
-}
-
-function renderMetricProjectSummary(container, groups) {
-  if (!container) return;
-  const withMetrics = groups.filter((group) => group.metricCount > 0).length;
-  const currentReady = groups.filter((group) => group.metricCount > 0 && group.currentCount > 0).length;
-  const targetReady = groups.filter((group) => group.metricCount > 0 && group.targetCount > 0).length;
-  const empty = groups.length - withMetrics;
-  container.innerHTML = [
-    ["已配置项目", `${withMetrics}/${groups.length}`, "green"],
-    ["已有当前值", `${currentReady}/${groups.length}`, "blue"],
-    ["已有目标值", `${targetReady}/${groups.length}`, "amber"],
-    ["待补指标", `${empty}`, empty ? "rose" : "green"],
-  ]
-    .map(
-      ([label, value, tone]) => `
-        <article class="metric-project-summary-card tone-${tone}">
-          <span>${escapeHtml(label)}</span>
-          <strong>${escapeHtml(value)}</strong>
-        </article>
-      `
-    )
-    .join("");
 }
 
 function renderProjectMetricRow(metric) {
@@ -2481,13 +2434,6 @@ function renderMetricDashboard() {
   if (catalogMeta) {
     catalogMeta.textContent = `${model.metricGroups.length} 个业务线 · ${model.summary.metricCount} 项指标，按项目和业务线有序展开`;
   }
-  const projectMeta = document.querySelector("#metricProjectMeta");
-  if (projectMeta) {
-    const configured = model.projectGroups.filter((group) => group.metricCount > 0).length;
-    projectMeta.textContent = `${configured}/${model.projectGroups.length} 个项目已配置结构化指标`;
-  }
-  renderMetricActionSummary(document.querySelector("#metricActionSummary"), model.actionGroups, model.summary.metricCount);
-  renderMetricProjectSummary(document.querySelector("#metricProjectSummary"), model.projectGroups);
   renderMetricProjectBoard(document.querySelector("#metricProjectBoard"), model.projectGroups);
   renderMetricAllGroups(document.querySelector("#metricAllGroups"), model.metricGroups);
 }
