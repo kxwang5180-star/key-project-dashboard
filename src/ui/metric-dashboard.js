@@ -44,6 +44,7 @@ function toMetricRecord(project, metric, index) {
     current: metric.current || "",
     target: metric.target || "",
     observation: metric.observation || "",
+    observable: metric.observable || "",
     history: Array.isArray(metric.history) ? metric.history : [],
     status,
     dashboardStatus: toDashboardStatus(status.key),

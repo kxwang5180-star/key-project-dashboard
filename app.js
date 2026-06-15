@@ -44,6 +44,7 @@ import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
 import { buildMetricDashboardModel } from "./src/ui/metric-dashboard.js";
 import { PROJECT_METRIC_SOURCE_VERSION, shouldUseSavedMetrics } from "./src/ui/metric-source.js";
 import { splitMetricObservation } from "./src/services/metric-observation.js";
+import { buildWeeklyReportSaveNotice } from "./src/ui/report-save-notice.js";
 import {
   buildProjectMaintenanceHash,
   parseProjectMaintenanceHash,
@@ -2283,6 +2284,7 @@ function renderMetricInlineProgress(metric) {
 }
 
 function renderMetricCatalogRecord(metric) {
+  const detail = splitMetricObservation(metric.observation, metric.observable);
   const currentText = metric.current || "待填当前值";
   const targetText = metric.target ? `目标 ${metric.target}` : "未设目标";
   const progressText = metric.progress !== null ? `${metric.progress}%` : "定性跟踪";
@@ -2303,7 +2305,10 @@ function renderMetricCatalogRecord(metric) {
         ${renderMetricInlineProgress(metric)}
         <span>${escapeHtml(progressText)}</span>
       </div>
-      <p>${escapeHtml(compactText(metric.observation || "未维护计算口径", 76))}</p>
+      <div class="metric-catalog-detail">
+        <span><b>计算口径</b>${escapeHtml(compactText(detail.observation || "未维护计算口径", 72))}</span>
+        <span><b>可观测时间</b>${escapeHtml(detail.observable || "未明确")}</span>
+      </div>
     </article>
   `;
 }
@@ -3061,7 +3066,7 @@ function renderMetricVisualCopy({ metric, index, statusBadge }) {
   const metricName = escapeHtml(metric.name || `指标 ${index + 1}`);
   return `
     <div class="metric-visual-copy">
-      <span class="metric-label-strip"><i>目标</i>${statusBadge}</span>
+      <span class="metric-label-strip">${statusBadge}</span>
       <strong>${metricName}</strong>
     </div>
   `;
@@ -4272,11 +4277,11 @@ document.addEventListener("click", async (event) => {
       state.briefEditMode = false;
       state.saveNotice = "项目概览已保存。";
     } catch (error) {
-      state.saveNotice = error.message;
+      state.saveNotice = formatUserFacingError(error, "项目概览保存失败，请稍后重试");
     } finally {
       finishAction(actionKey);
     }
-    renderReportProjectBrief();
+    renderMemberWorkspace();
     renderProjectList();
     renderDetail();
     renderGovernance();
@@ -4733,6 +4738,7 @@ memberReportForm.addEventListener("input", (event) => {
 
 memberReportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   if (state.reportSubmitting) return;
   if (!memberProfile) {
     state.currentView = "register";
@@ -4747,7 +4753,7 @@ memberReportForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(form);
   const projectId = String(formData.get("projectId") || memberProfile.projectId);
   const reportProject = projects.find((project) => project.id === projectId) || getReportProject();
   const report = {
@@ -4767,19 +4773,19 @@ memberReportForm.addEventListener("submit", async (event) => {
   };
 
   if (!hasMeaningfulProgress(report.progress)) {
-    const progressField = event.currentTarget.elements.progress;
+    const progressField = form.elements.progress;
     progressField.setCustomValidity("请补充本周实际进展，模板标题不能作为有效内容");
     progressField.reportValidity();
     progressField.focus();
     return;
   }
-  event.currentTarget.elements.progress.setCustomValidity("");
+  form.elements.progress.setCustomValidity("");
 
   const reportMilestone = getReportMilestone(reportProject);
   if (reportMilestone) report.milestoneId = reportMilestone.id;
 
   state.reportSubmitting = true;
-  const submitButton = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
+  const submitButton = event.submitter || form.querySelector('button[type="submit"]');
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.textContent = "保存中...";
@@ -4790,17 +4796,16 @@ memberReportForm.addEventListener("submit", async (event) => {
     applyProjectReportState(payload?.projectState);
     submissions = [savedReport || report, ...submissions.filter((item) => item.id !== savedReport?.id)].slice(0, 100);
     await loadWeeklyReports();
-    const notification = payload?.notification;
-    const noticeSuffix = notification?.sent
-      ? "，已通知项目群"
-      : notification && notification.skipped === false
-        ? "，但群通知发送失败，请稍后重试"
-        : "";
-    state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，已同步到服务端${noticeSuffix}`;
-    event.currentTarget.reset();
-    event.currentTarget.elements.progress.value = "";
-    event.currentTarget.elements.risk.value = "";
-    document.querySelector("#reportProjectSelect").value = report.projectId;
+    state.saveNotice = buildWeeklyReportSaveNotice({
+      projectName: reportProject.shortName,
+      week: report.week,
+      notification: payload?.notification,
+    });
+    form.reset();
+    form.elements.progress.value = "";
+    form.elements.risk.value = "";
+    const projectSelect = form.querySelector("#reportProjectSelect") || document.querySelector("#reportProjectSelect");
+    if (projectSelect) projectSelect.value = report.projectId;
     renderMemberWorkspace();
     renderDetail();
     renderRisks();
@@ -4811,7 +4816,7 @@ memberReportForm.addEventListener("submit", async (event) => {
     renderMemberWorkspace();
   } finally {
     state.reportSubmitting = false;
-    const activeSubmitButton = event.currentTarget.querySelector('button[type="submit"]');
+    const activeSubmitButton = form.querySelector('button[type="submit"]');
     if (activeSubmitButton) {
       activeSubmitButton.disabled = false;
       activeSubmitButton.textContent = "保存本周更新";
