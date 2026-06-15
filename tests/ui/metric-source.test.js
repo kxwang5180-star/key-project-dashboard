@@ -23,3 +23,14 @@ test("shouldUseSavedMetrics keeps user edits saved against the current metric so
     true
   );
 });
+
+test("shouldUseSavedMetrics preserves an intentional empty saved metric list", () => {
+  assert.equal(
+    shouldUseSavedMetrics({
+      savedMetrics: [],
+      sourceMetricRows: [{ projectName: "【IPAD自助结账】项目", name: "自助结账渗透率" }],
+      metricsSourceVersion: PROJECT_METRIC_SOURCE_VERSION,
+    }),
+    true
+  );
+});

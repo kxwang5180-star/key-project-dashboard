@@ -35,7 +35,7 @@ import {
   resolveProjectMaintenanceTarget,
 } from "./src/ui/report-projects.js";
 import { buildActionKey, isActionPending, setActionPending } from "./src/ui/action-state.js";
-import { buildApiErrorMessage, parseApiPayload } from "./src/ui/api-response.js";
+import { buildApiErrorMessage, formatUserFacingError, parseApiPayload } from "./src/ui/api-response.js";
 import { buildAuthPanelViewModel } from "./src/ui/auth-panel.js";
 import { buildDataHealthModel } from "./src/ui/data-health.js";
 import { isExpandedKey, toggleExpandedKey } from "./src/ui/detail-toggles.js";
@@ -667,7 +667,8 @@ function applyProjectReportState(projectState) {
   const project = projects.find((item) => item.id === projectState.projectId);
   if (!project) return;
   if (Array.isArray(projectState.metrics)) {
-    getProjectMaintenance(project.id).metrics = projectState.metrics.map((metric, index) => ({
+    const maintenance = getProjectMaintenance(project.id);
+    maintenance.metrics = projectState.metrics.map((metric, index) => ({
       id: metric.id || uid(`${project.id}-metric`),
       name: String(metric.name || `指标 ${index + 1}`).trim(),
       current: String(metric.current || "").trim(),
@@ -676,6 +677,7 @@ function applyProjectReportState(projectState) {
       chartType: String(metric.chartType || "").trim(),
       history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
     }));
+    maintenance.metricsSourceVersion = PROJECT_METRIC_SOURCE_VERSION;
   }
   if (Array.isArray(projectState.milestones)) {
     project.milestones = projectState.milestones.map((milestone, index) => normalizeMilestone(project, milestone, index));
@@ -2309,6 +2311,11 @@ function formatMetricValue(value) {
   return String(value || "").trim() || "无";
 }
 
+function isEmptyMetricDisplayValue(value) {
+  const text = String(value || "").trim();
+  return !text || text === "无" || text === "-" || /^(暂无|待填|待补充|待持续观测)$/i.test(text);
+}
+
 function splitMetricObservation(value) {
   const source = String(value || "").trim();
   if (!source) return { formula: "未维护计算口径", observable: "未明确" };
@@ -2346,13 +2353,17 @@ function renderMetricProjectSummary(container, groups) {
 
 function renderProjectMetricRow(metric) {
   const detail = splitMetricObservation(metric.observation);
+  const currentValue = formatMetricValue(metric.current);
+  const targetValue = formatMetricValue(metric.target);
+  const currentClass = `project-metric-value is-current${isEmptyMetricDisplayValue(currentValue) ? " is-empty-value" : ""}`;
+  const targetClass = `project-metric-value${isEmptyMetricDisplayValue(targetValue) ? " is-empty-value" : ""}`;
   return `
     <details class="project-metric-row is-status-${metric.status.key}">
       <summary>
         <span class="metric-status-dot is-status-${metric.status.key}"></span>
         <strong>${escapeHtml(metric.name)}</strong>
-        <span class="project-metric-value is-current">${escapeHtml(formatMetricValue(metric.current))}</span>
-        <span class="project-metric-value">${escapeHtml(formatMetricValue(metric.target))}</span>
+        <span class="${currentClass}">${escapeHtml(currentValue)}</span>
+        <span class="${targetClass}">${escapeHtml(targetValue)}</span>
         <em>详情</em>
       </summary>
       <div class="project-metric-detail">
@@ -2378,7 +2389,7 @@ function renderMetricProjectCard(group) {
         hiddenMetrics.length
           ? `
             <details class="metric-more">
-              <summary>展开其余 ${hiddenMetrics.length} 项指标</summary>
+              <summary><span>展开更多指标</span><b>${hiddenMetrics.length} 项</b></summary>
               <div>${hiddenMetrics.map(renderProjectMetricRow).join("")}</div>
             </details>
           `
@@ -2395,7 +2406,6 @@ function renderMetricProjectCard(group) {
         </div>
         <strong>${group.metricCount}</strong>
       </header>
-      ${renderMetricStatusBars(group.statusCounts, group.metricCount)}
       <div class="metric-project-meta">
         <span>当前值 ${group.currentCount}/${group.metricCount}</span>
         <span>目标值 ${group.targetCount}/${group.metricCount}</span>
@@ -4279,7 +4289,7 @@ document.addEventListener("click", async (event) => {
   if (deleteMetric) {
     const project = getReportProject();
     const metrics = ensureMetricDraft(project).filter((metric) => metric.id !== deleteMetric.dataset.deleteMetric);
-    draftStore.metrics[project.id] = metrics.length ? metrics : getDefaultMetricItems(project);
+    draftStore.metrics[project.id] = metrics;
     renderReportProjectMetrics();
     return;
   }
@@ -4319,7 +4329,7 @@ document.addEventListener("click", async (event) => {
         state.saveNotice = "项目指标已保存。";
       })
       .catch((error) => {
-        state.saveNotice = error.message;
+        state.saveNotice = formatUserFacingError(error, "项目指标保存失败，请稍后重试");
       })
       .finally(() => {
         finishAction(actionKey);
@@ -4776,7 +4786,7 @@ memberReportForm.addEventListener("submit", async (event) => {
     renderProjectList();
     renderGovernance();
   } catch (error) {
-    state.saveNotice = error.message || "周报保存失败，请稍后重试";
+    state.saveNotice = formatUserFacingError(error, "周报保存失败，请检查内容后稍后重试");
     renderMemberWorkspace();
   } finally {
     state.reportSubmitting = false;

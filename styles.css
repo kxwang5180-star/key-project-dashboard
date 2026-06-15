@@ -2093,6 +2093,13 @@ h3 {
   color: var(--ink);
 }
 
+.project-metric-value.is-empty-value,
+.project-metric-value.is-current.is-empty-value {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 760;
+}
+
 .project-metric-row summary em {
   color: var(--muted);
   font-size: 12px;
@@ -2139,24 +2146,36 @@ h3 {
 }
 
 .metric-more {
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
-  background: rgba(246, 249, 252, 0.72);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .metric-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
   cursor: pointer;
   list-style: none;
-  padding: 9px 12px;
+  padding: 4px 2px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 840;
 }
 
+.metric-more > summary b {
+  border-radius: 999px;
+  background: #edf4fb;
+  color: var(--muted);
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 .metric-more > div {
   display: grid;
   gap: 6px;
-  padding: 0 8px 8px;
+  padding: 6px 0 0;
 }
 
 .metric-catalog-layout {
