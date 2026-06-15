@@ -81,12 +81,12 @@ function buildMilestoneRow(target, index = 0) {
       element_id: `col_ms_${index}`,
       width: "weighted",
       elements: [
-        markdown(`**${compactText(target.projectName, 28)}**`, { elementId: `md_project_${index}`, margin: "0px 0px 4px 0px" }),
+        markdown(`**${compactText(target.projectName, 28)}**`, { elementId: `md_project_${index}`, margin: "0px 0px 2px 0px" }),
         markdown(compactText(target.milestoneTitle, 96), { elementId: `md_title_${index}` }),
         markdown(`${target.dueDate}${projectInfo.length ? `｜${projectInfo.join("｜")}` : ""}`, { elementId: `md_date_${index}`, textSize: "notation" }),
       ],
-      padding: "8px 8px 8px 8px",
-      vertical_spacing: "4px",
+      padding: "7px 8px 7px 8px",
+      vertical_spacing: "2px",
       vertical_align: "top",
     },
   ];
@@ -96,7 +96,7 @@ function buildMilestoneRow(target, index = 0) {
     background_style: "grey",
     horizontal_spacing: "8px",
     columns,
-    margin: "6px 0px 0px 0px",
+    margin: "4px 0px 0px 0px",
   };
 }
 
@@ -124,24 +124,22 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
   const firstTarget = items[0] || {};
   const projectUrl = buildProjectUrl(baseUrl, firstTarget.projectId);
 
-  const elements = [
-    markdown("请关注以下重点项目里程碑，并在项目维护页及时更新节点进展。", { elementId: "md_intro", margin: "0px 0px 8px 0px" }),
-  ];
+  const elements = [];
 
   let rowIndex = 0;
   for (const [label, groupItems] of groupTargetsByTiming(items).entries()) {
-    elements.push(markdown(`**${label}**`, { elementId: `md_group_${rowIndex}`, margin: "8px 0px 0px 0px" }));
+    elements.push(markdown(`**${label}**`, { elementId: `md_group_${rowIndex}`, margin: rowIndex ? "6px 0px 0px 0px" : "0px 0px 0px 0px" }));
     elements.push(...groupItems.map((target) => buildMilestoneRow(target, rowIndex++)));
   }
 
   if (hiddenCount) {
-    elements.push(markdown(`另有 ${hiddenCount} 个里程碑未在本卡片中展开，请进入项目看板查看。`, { elementId: "md_hidden", margin: "8px 0px 0px 0px" }));
+    elements.push(markdown(`另有 ${hiddenCount} 个里程碑未在本卡片中展开，请进入项目看板查看。`, { elementId: "md_hidden", margin: "6px 0px 0px 0px" }));
   }
 
   const actions = [];
   if (projectUrl) {
     actions.push(button({
-      text: "去维护",
+      text: "去查看",
       type: "default",
       behaviors: [openUrlBehavior(projectUrl)],
       elementId: "btn_open",
@@ -156,7 +154,7 @@ export function buildMilestoneReminderCard(targets = [], options = {}) {
       background_style: "default",
       horizontal_spacing: "8px",
       columns: actions.map((actionButton, index) => buttonColumn(actionButton, { elementId: `col_act_${index}` })),
-      margin: "12px 0px 0px 0px",
+      margin: "8px 0px 0px 0px",
     });
   }
 

@@ -14,10 +14,13 @@ import {
   updateMilestoneDraftField,
 } from "./src/ui/maintenance-drafts.js";
 import {
+  formatMilestoneChangeSummary,
+  formatMilestoneStatusLabel,
   formatProjectStageLabel,
   getLatestProjectReport,
   getMilestoneReportPreview,
   getNearestMilestone,
+  getProjectReportHistory,
   getVisibleCalendarEvents,
   getVisibleMilestones,
   getWeekRangeSummary,
@@ -201,6 +204,22 @@ const milestoneStatusMap = {
   changed: "变更",
   planned: "计划中",
 };
+
+function getMilestoneReports(projectId, milestoneId) {
+  return submissions
+    .filter((report) => report.projectId === projectId && report.milestoneId === milestoneId)
+    .sort((a, b) => {
+      const weekDiff = (Number(b.week) || 0) - (Number(a.week) || 0);
+      if (weekDiff) return weekDiff;
+      return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+    });
+}
+
+function getMilestoneReportBadge(projectId, milestoneId) {
+  const count = getMilestoneReports(projectId, milestoneId).length;
+  if (!count) return "";
+  return `<span class="calendar-update-badge">${count > 1 ? `${count}条更新` : "有更新"}</span>`;
+}
 
 const editableMilestoneStatusMap = {
   planned: "计划中",
@@ -1795,12 +1814,13 @@ function renderCalendar() {
         (milestone) => `
           <button class="calendar-event has-tip" data-project="${milestone.projectId}" data-milestone="${
           milestone.id
-        }" data-tip="${escapeHtml(`${milestone.projectShortName} · ${milestoneStatusMap[milestone.status] || "计划中"} · ${milestone.raw}${milestone.changeNote ? ` · 变更：${milestone.changeNote}` : ""}`)}" style="--project-color: ${milestone.projectColor}">
+        }" data-tip="${escapeHtml(`${milestone.projectShortName} · ${formatMilestoneStatusLabel(milestone.status)} · ${milestone.raw}${milestone.changeNote ? ` · 变更：${formatMilestoneChangeSummary(milestone.changeNote)}` : ""}`)}" style="--project-color: ${milestone.projectColor}">
             <span class="calendar-event-top">
               <b>${escapeHtml(milestone.projectShortName)}</b>
               ${renderMilestoneStatusTag(milestone)}
             </span>
             <strong>${escapeHtml(compactText(milestone.title, 26))}</strong>
+            ${getMilestoneReportBadge(milestone.projectId, milestone.id)}
             ${renderChangeBadge(milestone)}
           </button>
         `
@@ -1853,9 +1873,7 @@ function renderTeamCards(team) {
 }
 
 function getProjectSubmissions(projectId) {
-  return submissions
-    .filter((item) => item.projectId === projectId)
-    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  return getProjectReportHistory(submissions, projectId);
 }
 
 function getCurrentWeekSubmission(projectId) {
@@ -3073,13 +3091,13 @@ function renderMetricVisual(metric, index, project) {
 
 function renderMilestoneStatusTag(milestone) {
   const status = milestone.status || "planned";
-  const label = milestoneStatusMap[status] || milestoneStatusMap.planned;
+  const label = formatMilestoneStatusLabel(status);
   return `<span class="calendar-state ${status}">${escapeHtml(label)}</span>`;
 }
 
 function renderChangeBadge(milestone) {
   if (milestone.status !== "changed" && !milestone.changeNote) return "";
-  const note = milestone.changeNote ? compactText(milestone.changeNote, 28) : "请补充变更原因";
+  const note = milestone.changeNote ? compactText(formatMilestoneChangeSummary(milestone.changeNote), 28) : "请补充变更原因";
   return `<small class="change-where">变更：${escapeHtml(note)}</small>`;
 }
 
@@ -3372,16 +3390,13 @@ function renderMemberWorkspace() {
 
   const list = document.querySelector("#submissionList");
   const reportProject = getReportProject();
-  const visibleSubmissions = submissions.filter((item) => item.projectId === reportProject?.id);
+  const visibleSubmissions = getProjectReportHistory(submissions, reportProject?.id, { limit: 8 });
   if (!visibleSubmissions.length) {
     list.innerHTML = '<div class="empty-state">还没有填报记录</div>';
     return;
   }
 
   list.innerHTML = visibleSubmissions
-    .slice()
-    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
-    .slice(0, 8)
     .map((item) => {
       const project = projects.find((projectItem) => projectItem.id === item.projectId);
       const deleteKey = buildActionKey("delete-report", item.id);
@@ -3445,30 +3460,46 @@ function openMilestoneModal(projectId, milestoneId) {
   const reportMarkup = reportPreview.reports.length
     ? reportPreview.reports
         .map(
-          (report) => `
-            <article class="modal-report-item">
+          (report) => {
+            const reportDetailKey = report.id || `${projectId}:${milestoneId}:${report.week || CURRENT_REPORT_WEEK}`;
+            const expanded = isExpandedKey(state.expandedSubmissionDetails, `modal:${reportDetailKey}`);
+            return `
+            <article class="modal-report-item ${expanded ? "is-expanded" : ""}" data-toggle-modal-report-detail="${escapeHtml(reportDetailKey)}" role="button" tabindex="0">
               <header>
                 <strong>第${escapeHtml(report.week || CURRENT_REPORT_WEEK)}周</strong>
-                <span>${escapeHtml(report.memberName || "未记录成员")}</span>
+                <span>${escapeHtml(report.memberName || "未记录成员")} · ${expanded ? "点击收起" : "点击查看详情"}</span>
               </header>
               <p>${escapeHtml(compactText(report.progress || "暂无进展内容", reportPreview.isExpanded ? 220 : 96))}</p>
               ${report.risk ? `<small>风险与诉求：${escapeHtml(compactText(report.risk, reportPreview.isExpanded ? 160 : 72))}</small>` : ""}
+              ${
+                expanded
+                  ? `<div class="modal-report-detail">
+                      <p><b>完整进展</b>${escapeHtml(report.progress || "暂无进展内容")}</p>
+                      <p><b>风险与诉求</b>${escapeHtml(report.risk || "暂无")}</p>
+                      <p><b>里程碑状态</b>${escapeHtml(formatMilestoneStatusLabel(report.milestoneStatus))}${report.milestoneDate ? ` · ${escapeHtml(report.milestoneDate)}` : ""}</p>
+                      <p><b>提交时间</b>${escapeHtml(new Date(report.updatedAt || report.createdAt).toLocaleString("zh-CN"))}</p>
+                    </div>`
+                  : ""
+              }
             </article>
-          `
+          `;
+          }
         )
         .join("")
     : '<p class="muted-text">该里程碑暂无周度维护记录</p>';
   const rawText = String(milestone.raw || "").trim();
   const rawMarkup = rawText && rawText !== milestone.title ? `<p>${escapeHtml(rawText)}</p>` : "";
+  const changeNote = formatMilestoneChangeSummary(milestone.changeNote);
   document.querySelector("#milestoneModalContent").innerHTML = `
     <p class="modal-eyebrow">${escapeHtml(project.shortName)} · ${escapeHtml(project.businessLine || "未填业务线")} · ${escapeHtml(milestone.source)}</p>
     <h2 id="milestoneModalTitle">${escapeHtml(milestone.title)}</h2>
     <div class="modal-status-line">
-      <span class="calendar-status ${milestone.status}">${milestoneStatusMap[milestone.status]}</span>
+      <span class="calendar-status ${milestone.status}">${escapeHtml(formatMilestoneStatusLabel(milestone.status))}</span>
       <span>${escapeHtml(milestone.dateInfo?.label || "未标日期")}</span>
+      ${reportPreview.total ? `<span class="modal-update-chip">${reportPreview.total} 条周报更新</span>` : ""}
     </div>
     ${rawMarkup}
-    ${milestone.changeNote ? `<p><strong>变更原因：</strong>${escapeHtml(milestone.changeNote)}</p>` : ""}
+    ${changeNote ? `<p><strong>变更原因：</strong>${escapeHtml(changeNote)}</p>` : ""}
     <section class="modal-report-list">
       <div class="modal-section-head">
         <strong>周度维护</strong>
@@ -3483,12 +3514,16 @@ function openMilestoneModal(projectId, milestoneId) {
     </section>
   `;
   const modal = document.querySelector("#milestoneModal");
+  modal.dataset.projectId = projectId;
+  modal.dataset.milestoneId = milestoneId;
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
 }
 
 function closeMilestoneModal() {
   const modal = document.querySelector("#milestoneModal");
+  delete modal.dataset.projectId;
+  delete modal.dataset.milestoneId;
   modal.classList.remove("is-open");
   modal.setAttribute("aria-hidden", "true");
 }
@@ -3710,7 +3745,7 @@ function renderGovernance() {
           </div>
           <div class="governance-actions">
             <button type="button" data-governance-project="${item.project.id}">看详情</button>
-            <button type="button" data-governance-report="${item.project.id}">去维护</button>
+            <button type="button" data-governance-report="${item.project.id}">去查看</button>
           </div>
         </article>
       `
@@ -4490,6 +4525,16 @@ document.addEventListener("click", async (event) => {
     state.expandedMilestoneReports[modalReportsButton.dataset.toggleModalReports] =
       !state.expandedMilestoneReports[modalReportsButton.dataset.toggleModalReports];
     openMilestoneModal(projectId, milestoneId);
+    return;
+  }
+
+  const modalReportDetail = event.target.closest("[data-toggle-modal-report-detail]");
+  if (modalReportDetail) {
+    const modal = document.querySelector("#milestoneModal");
+    const projectId = modal?.dataset.projectId;
+    const milestoneId = modal?.dataset.milestoneId;
+    toggleExpandedKey(state.expandedSubmissionDetails, `modal:${modalReportDetail.dataset.toggleModalReportDetail}`);
+    if (projectId && milestoneId) openMilestoneModal(projectId, milestoneId);
     return;
   }
 

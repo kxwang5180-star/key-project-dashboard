@@ -77,6 +77,31 @@ export function getMilestoneReportPreview(
   };
 }
 
+export function formatMilestoneStatusLabel(status) {
+  const labels = {
+    PLANNED: "计划中",
+    IN_PROGRESS: "进行中",
+    COMPLETED: "已完成",
+    CHANGED: "变更",
+    OVERDUE: "逾期",
+    UPCOMING: "临近",
+    planned: "计划中",
+    "in-progress": "进行中",
+    completed: "已完成",
+    changed: "变更",
+    overdue: "逾期",
+    upcoming: "临近",
+  };
+  const value = String(status || "").trim();
+  return labels[value] || labels[value.toUpperCase()] || value || "未填写";
+}
+
+export function formatMilestoneChangeSummary(summary = "") {
+  return String(summary || "")
+    .replace(/状态由([A-Z_]+)调整为([A-Z_]+)/g, (_, from, to) => `状态由${formatMilestoneStatusLabel(from)}调整为${formatMilestoneStatusLabel(to)}`)
+    .replace(/状态由([a-z-]+)调整为([a-z-]+)/g, (_, from, to) => `状态由${formatMilestoneStatusLabel(from)}调整为${formatMilestoneStatusLabel(to)}`);
+}
+
 export function getNearestMilestone(milestones, now = new Date()) {
   const source = Array.isArray(milestones) ? milestones : [];
   const dated = source.filter((milestone) => milestone?.dateInfo?.date);
@@ -92,13 +117,19 @@ export function getNearestMilestone(milestones, now = new Date()) {
 }
 
 export function getLatestProjectReport(reports, projectId) {
-  return (Array.isArray(reports) ? reports : [])
-    .filter((report) => report.projectId === projectId)
+  return getProjectReportHistory(reports, projectId)[0] || null;
+}
+
+export function getProjectReportHistory(reports, projectId, { limit = 0 } = {}) {
+  const matched = (Array.isArray(reports) ? reports : [])
+    .filter((report) => String(report.projectId || "") === String(projectId || ""))
     .sort((a, b) => {
       const activityDiff = new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
       if (activityDiff) return activityDiff;
       return (Number(b.week) || 0) - (Number(a.week) || 0);
-    })[0] || null;
+    });
+  const safeLimit = Number(limit) || 0;
+  return safeLimit > 0 ? matched.slice(0, safeLimit) : matched;
 }
 
 export function formatProjectStageLabel(stage) {

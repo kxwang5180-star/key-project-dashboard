@@ -87,15 +87,15 @@ function infoBlock(lines = [], elementId = "row_info") {
         width: "weighted",
         elements: lines.map((line, index) => markdown(line, {
           elementId: `${elementId}_md_${index}`,
-          margin: index ? "4px 0px 0px 0px" : "0px 0px 0px 0px",
-          textSize: index ? "normal_v2" : "normal_v2",
+          margin: index ? "3px 0px 0px 0px" : "0px 0px 0px 0px",
+          textSize: "normal_v2",
         })),
-        padding: "8px 8px 8px 8px",
-        vertical_spacing: "4px",
+        padding: "7px 8px 7px 8px",
+        vertical_spacing: "2px",
         vertical_align: "top",
       },
     ],
-    margin: "6px 0px 0px 0px",
+    margin: "4px 0px 0px 0px",
   };
 }
 
@@ -129,29 +129,18 @@ export function buildWeeklyReportNotificationCard({
   const projectUrl = buildProjectUrl(baseUrl, project.id);
 
   const elements = [
-    markdown("项目成员已提交本周更新，请关注进展、风险与里程碑状态。", {
-      elementId: "md_intro",
-      margin: "0px 0px 8px 0px",
-    }),
     infoBlock([
       `**${compactText(name, 32)}**`,
       `第${weekNumber}周｜提交人：${reporter}${milestoneTitle ? `｜关联里程碑：${compactText(milestoneTitle, 42)}` : ""}`,
+      `**本周进展：**${progress}`,
+      `**风险与支持：**${riskSummary || "暂无"}`,
     ], "row_summary"),
-    markdown("**本周进展**", { elementId: "md_progress_title", margin: "10px 0px 0px 0px" }),
-    infoBlock([progress], "row_progress"),
   ];
-
-  if (riskSummary) {
-    elements.push(
-      markdown("**风险与支持**", { elementId: "md_risk_title", margin: "10px 0px 0px 0px" }),
-      infoBlock([riskSummary], "row_risk"),
-    );
-  }
 
   const actions = [];
   if (projectUrl) {
     actions.push(button({
-      text: "去维护",
+      text: "去查看",
       type: "default",
       behaviors: [openUrlBehavior(projectUrl)],
       elementId: "btn_open",
@@ -166,7 +155,7 @@ export function buildWeeklyReportNotificationCard({
       background_style: "default",
       horizontal_spacing: "8px",
       columns: actions.map((actionButton, index) => buttonColumn(actionButton, { elementId: `col_act_${index}` })),
-      margin: "12px 0px 0px 0px",
+      margin: "8px 0px 0px 0px",
     });
   }
 

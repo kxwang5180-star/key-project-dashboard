@@ -1331,6 +1331,28 @@ h3 {
   background: rgba(230, 70, 70, 0.1);
 }
 
+.calendar-update-badge,
+.modal-update-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 880;
+  line-height: 1.4;
+}
+
+.calendar-update-badge {
+  padding: 1px 6px;
+}
+
+.modal-update-chip {
+  padding: 2px 8px;
+}
+
 .change-where {
   overflow: hidden;
   color: var(--violet);
@@ -5232,7 +5254,16 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(248, 251, 255, 0.86);
+  cursor: pointer;
   padding: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.modal-report-item:hover,
+.modal-report-item.is-expanded {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(32, 45, 68, 0.07);
 }
 
 .modal-report-item header {
@@ -5255,6 +5286,24 @@ button:disabled {
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.modal-report-detail {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.modal-report-detail p {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.modal-report-detail b {
+  color: var(--ink);
 }
 
 .calendar-status.completed,

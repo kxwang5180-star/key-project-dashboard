@@ -78,6 +78,19 @@ function parseDateKey(value) {
   return date;
 }
 
+function milestoneStatusLabel(status) {
+  const labels = {
+    PLANNED: "计划中",
+    IN_PROGRESS: "进行中",
+    COMPLETED: "已完成",
+    CHANGED: "变更",
+    OVERDUE: "逾期",
+    UPCOMING: "临近",
+  };
+  const value = String(status || "").trim();
+  return labels[value] || value || "未填写";
+}
+
 export function parseReportMilestoneDate(value) {
   return parseDateKey(value);
 }
@@ -125,7 +138,7 @@ export function buildMilestoneUpdateFromReport(milestone, report) {
 
   if (nextTitle !== oldTitle) changedParts.push(`名称由「${oldTitle}」调整为「${nextTitle}」`);
   if (nextDate !== oldDate) changedParts.push(`日期由${oldDate || "未填写"}调整为${nextDate || "未填写"}`);
-  if (nextStatus !== oldStatus && !changedParts.length) changedParts.push(`状态由${oldStatus}调整为${nextStatus}`);
+  if (nextStatus !== oldStatus && !changedParts.length) changedParts.push(`状态由${milestoneStatusLabel(oldStatus)}调整为${milestoneStatusLabel(nextStatus)}`);
   if (!changedParts.length) return null;
 
   const existingChangeSummary = String(milestone.changeSummary || "").trim();

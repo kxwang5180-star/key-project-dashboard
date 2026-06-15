@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatMilestoneChangeSummary,
+  formatMilestoneStatusLabel,
   formatProjectStageLabel,
   getLatestProjectReport,
   getMilestoneReportPreview,
   getNearestMilestone,
+  getProjectReportHistory,
   getVisibleCalendarEvents,
   getVisibleMilestones,
   getWeekRangeSummary,
@@ -109,6 +112,28 @@ test("getLatestProjectReport returns the newest weekly report for a project", ()
   );
 
   assert.equal(latest.id, "r4");
+});
+
+test("getProjectReportHistory keeps previous project reports visible in newest order", () => {
+  const history = getProjectReportHistory(
+    [
+      { id: "r1", projectId: "p1", week: 5, createdAt: "2026-06-01T00:00:00.000Z" },
+      { id: "r2", projectId: "p2", week: 6, createdAt: "2026-06-04T00:00:00.000Z" },
+      { id: "r3", projectId: "p1", week: 6, createdAt: "2026-06-03T00:00:00.000Z" },
+      { id: "r4", projectId: "p1", week: 5, createdAt: "2026-06-01T00:00:00.000Z", updatedAt: "2026-06-05T00:00:00.000Z" },
+    ],
+    "p1"
+  );
+
+  assert.deepEqual(history.map((item) => item.id), ["r4", "r3", "r1"]);
+  assert.deepEqual(getProjectReportHistory(history, "p1", { limit: 2 }).map((item) => item.id), ["r4", "r3"]);
+});
+
+test("formatMilestoneChangeSummary translates persisted enum status changes", () => {
+  assert.equal(formatMilestoneStatusLabel("IN_PROGRESS"), "进行中");
+  assert.equal(formatMilestoneStatusLabel("completed"), "已完成");
+  assert.equal(formatMilestoneChangeSummary("状态由IN_PROGRESS调整为COMPLETED"), "状态由进行中调整为已完成");
+  assert.equal(formatMilestoneChangeSummary("状态由in-progress调整为completed"), "状态由进行中调整为已完成");
 });
 
 test("formatProjectStageLabel hides raw enum stage labels", () => {

@@ -166,6 +166,25 @@ test("buildMilestoneUpdateFromReport records milestone changes from weekly repor
   assert.match(update.changeSummary, /日期由2026-06-01调整为2026-06-08/);
 });
 
+test("buildMilestoneUpdateFromReport writes readable status change summaries", () => {
+  const update = buildMilestoneUpdateFromReport(
+    {
+      title: "优先级确认",
+      dueDate: new Date("2026-06-10T00:00:00.000Z"),
+      status: "IN_PROGRESS",
+      changeSummary: "",
+    },
+    {
+      milestoneTitle: "优先级确认",
+      milestoneDate: "2026-06-10",
+      milestoneState: "completed",
+    }
+  );
+
+  assert.equal(update.status, "COMPLETED");
+  assert.equal(update.changeSummary, "状态由进行中调整为已完成");
+});
+
 test("buildMilestoneUpdateFromReport ignores invalid report milestone dates", () => {
   assert.equal(
     buildMilestoneUpdateFromReport(
