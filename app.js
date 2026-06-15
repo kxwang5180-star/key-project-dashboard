@@ -43,6 +43,7 @@ import { getMetricTargetStatus } from "./src/ui/metric-status.js";
 import { buildMetricTargetDetail } from "./src/ui/metric-display.js";
 import { buildMetricDashboardModel } from "./src/ui/metric-dashboard.js";
 import { PROJECT_METRIC_SOURCE_VERSION, shouldUseSavedMetrics } from "./src/ui/metric-source.js";
+import { splitMetricObservation } from "./src/services/metric-observation.js";
 import {
   buildProjectMaintenanceHash,
   parseProjectMaintenanceHash,
@@ -525,6 +526,7 @@ async function saveProjectMetrics(project, metricSource = getProjectMetricItems(
     currentValue: metric.current,
     targetValue: metric.target,
     observation: metric.observation,
+    observable: metric.observable,
     chartType: metric.chartType,
     history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
   }));
@@ -668,15 +670,19 @@ function applyProjectReportState(projectState) {
   if (!project) return;
   if (Array.isArray(projectState.metrics)) {
     const maintenance = getProjectMaintenance(project.id);
-    maintenance.metrics = projectState.metrics.map((metric, index) => ({
-      id: metric.id || uid(`${project.id}-metric`),
-      name: String(metric.name || `指标 ${index + 1}`).trim(),
-      current: String(metric.current || "").trim(),
-      target: String(metric.target || "").trim(),
-      observation: String(metric.observation || "").trim(),
-      chartType: String(metric.chartType || "").trim(),
-      history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
-    }));
+    maintenance.metrics = projectState.metrics.map((metric, index) => {
+      const detail = splitMetricObservation(metric.observation, metric.observable);
+      return {
+        id: metric.id || uid(`${project.id}-metric`),
+        name: String(metric.name || `指标 ${index + 1}`).trim(),
+        current: String(metric.current || "").trim(),
+        target: String(metric.target || "").trim(),
+        observation: detail.observation,
+        observable: detail.observable,
+        chartType: String(metric.chartType || "").trim(),
+        history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
+      };
+    });
     maintenance.metricsSourceVersion = PROJECT_METRIC_SOURCE_VERSION;
   }
   if (Array.isArray(projectState.milestones)) {
@@ -1025,18 +1031,22 @@ function normalizeMilestone(project, milestone, index = 0) {
 
 function getDefaultMetricItems(project) {
   if (Array.isArray(project.standardMetrics) && project.standardMetrics.length) {
-    return project.standardMetrics.map((metric, index) => ({
-      id: `${project.id}-metric-${index + 1}`,
-      name: String(metric.name || `指标 ${index + 1}`).trim(),
-      current: String(metric.current || "").trim(),
-      target: String(metric.target || "").trim(),
-      observation: String(metric.observation || "").trim(),
-      chartType: parseMetricNumber(metric.target) !== null ? "donut" : "value",
-      history:
-        metric.current && metric.current !== "-"
-          ? [{ date: formatDateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate()), value: metric.current }]
-          : [],
-    }));
+    return project.standardMetrics.map((metric, index) => {
+      const detail = splitMetricObservation(metric.observation, metric.observable);
+      return {
+        id: `${project.id}-metric-${index + 1}`,
+        name: String(metric.name || `指标 ${index + 1}`).trim(),
+        current: String(metric.current || "").trim(),
+        target: String(metric.target || "").trim(),
+        observation: detail.observation,
+        observable: detail.observable,
+        chartType: parseMetricNumber(metric.target) !== null ? "donut" : "value",
+        history:
+          metric.current && metric.current !== "-"
+            ? [{ date: formatDateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate()), value: metric.current }]
+            : [],
+      };
+    });
   }
 
   if (sourceMetricRows.length) return [];
@@ -1048,6 +1058,7 @@ function getDefaultMetricItems(project) {
       current: item.value || "",
       target: /%$/.test(item.value || "") ? "100%" : "",
       observation: index === 0 ? compactText(project.metricsText, 90) : "",
+      observable: "",
       history: item.value ? [{ date: formatDateKey(TODAY.getFullYear(), TODAY.getMonth() + 1, TODAY.getDate()), value: item.value }] : [],
     }));
   }
@@ -1059,6 +1070,7 @@ function getDefaultMetricItems(project) {
       current: "",
       target: "",
       observation: compactText(project.metricsText, 90),
+      observable: "",
       history: [],
     },
   ];
@@ -1120,15 +1132,19 @@ function commitBriefDraft(project) {
 
 function setProjectMetricItems(project, metrics) {
   const maintenance = getProjectMaintenance(project.id);
-  maintenance.metrics = metrics.map((metric, index) => ({
-    id: metric.id || uid(`${project.id}-metric`),
-    name: String(metric.name || `指标 ${index + 1}`).trim(),
-    current: String(metric.current || "").trim(),
-    target: String(metric.target || "").trim(),
-    observation: String(metric.observation || "").trim(),
-    chartType: String(metric.chartType || "").trim(),
-    history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
-  }));
+  maintenance.metrics = metrics.map((metric, index) => {
+    const detail = splitMetricObservation(metric.observation, metric.observable);
+    return {
+      id: metric.id || uid(`${project.id}-metric`),
+      name: String(metric.name || `指标 ${index + 1}`).trim(),
+      current: String(metric.current || "").trim(),
+      target: String(metric.target || "").trim(),
+      observation: detail.observation,
+      observable: detail.observable,
+      chartType: String(metric.chartType || "").trim(),
+      history: Array.isArray(metric.history) ? metric.history.slice(-8) : [],
+    };
+  });
   maintenance.metricsSourceVersion = PROJECT_METRIC_SOURCE_VERSION;
   persistProjectMaintenance();
 }
@@ -2316,18 +2332,6 @@ function isEmptyMetricDisplayValue(value) {
   return !text || text === "无" || text === "-" || /^(暂无|待填|待补充|待持续观测)$/i.test(text);
 }
 
-function splitMetricObservation(value) {
-  const source = String(value || "").trim();
-  if (!source) return { formula: "未维护计算口径", observable: "未明确" };
-  const marker = "；可观测：";
-  const markerIndex = source.indexOf(marker);
-  if (markerIndex === -1) return { formula: source, observable: "未明确" };
-  return {
-    formula: source.slice(0, markerIndex).trim() || "未维护计算口径",
-    observable: source.slice(markerIndex + marker.length).trim() || "未明确",
-  };
-}
-
 function renderMetricProjectSummary(container, groups) {
   if (!container) return;
   const withMetrics = groups.filter((group) => group.metricCount > 0).length;
@@ -2352,7 +2356,7 @@ function renderMetricProjectSummary(container, groups) {
 }
 
 function renderProjectMetricRow(metric) {
-  const detail = splitMetricObservation(metric.observation);
+  const detail = splitMetricObservation(metric.observation, metric.observable);
   const currentValue = formatMetricValue(metric.current);
   const targetValue = formatMetricValue(metric.target);
   const currentClass = `project-metric-value is-current${isEmptyMetricDisplayValue(currentValue) ? " is-empty-value" : ""}`;
@@ -2367,8 +2371,8 @@ function renderProjectMetricRow(metric) {
         <em>详情</em>
       </summary>
       <div class="project-metric-detail">
-        <span><b>计算口径</b>${escapeHtml(detail.formula)}</span>
-        <span><b>可观测时间</b>${escapeHtml(detail.observable)}</span>
+        <span><b>计算口径</b>${escapeHtml(detail.observation || "未维护计算口径")}</span>
+        <span><b>可观测时间</b>${escapeHtml(detail.observable || "未明确")}</span>
       </div>
     </details>
   `;
@@ -2389,7 +2393,7 @@ function renderMetricProjectCard(group) {
         hiddenMetrics.length
           ? `
             <details class="metric-more">
-              <summary><span>展开更多指标</span><b>${hiddenMetrics.length} 项</b></summary>
+              <summary><span class="metric-more-open">展开更多 ${hiddenMetrics.length} 项</span><span class="metric-more-close">收起指标</span></summary>
               <div>${hiddenMetrics.map(renderProjectMetricRow).join("")}</div>
             </details>
           `
@@ -3021,6 +3025,7 @@ function renderMetricTrend(metric) {
 
 function renderMetricDetail(metric, isExpanded) {
   if (!isExpanded) return "";
+  const detail = splitMetricObservation(metric.observation, metric.observable);
   const history = Array.isArray(metric.history) && metric.history.length
     ? metric.history
         .slice(-8)
@@ -3029,19 +3034,20 @@ function renderMetricDetail(metric, isExpanded) {
     : "<span>暂无历史记录</span>";
   return `
     <div class="metric-detail-panel">
-      <p><b>计算口径</b>${escapeHtml(metric.observation || "未维护计算口径")}</p>
+      <p><b>计算口径</b>${escapeHtml(detail.observation || "未维护计算口径")}</p>
+      <p><b>可观测时间</b>${escapeHtml(detail.observable || "未明确")}</p>
       <p><b>当前/目标</b>${escapeHtml(metric.current || "待填")}${metric.target ? ` / ${escapeHtml(metric.target)}` : ""}</p>
       <div class="metric-history-list">${history}</div>
     </div>
   `;
 }
 
-function renderMetricTargetStack({ label, value }) {
+function renderMetricTargetStack({ label, value, caption = "目标" }) {
   const text = String(value || "").trim();
   if (!text || text === "-") return "";
   return `
     <div class="metric-target-stack has-tip" data-tip="${escapeHtml(label)}">
-      <small>目标</small>
+      <small>${escapeHtml(caption)}</small>
       <strong>${escapeHtml(text)}</strong>
     </div>
   `;
@@ -3099,7 +3105,11 @@ function renderMetricVisual(metric, index, project) {
     `;
   }
 
-  const side = renderMetricTargetStack({ label: targetDetail, value: metric.current || metric.target });
+  const side = renderMetricTargetStack({
+    label: targetDetail,
+    value: metric.target || metric.current,
+    caption: metric.target ? "目标" : "当前",
+  });
   const hasSide = Boolean(side);
   return `
     <article class="${getMetricCardClass({ toneClass, statusClass, expanded, hasSide })}" style="--project-color: ${project.color}" data-toggle-metric-detail="${escapeHtml(metricKey)}" role="button" tabindex="0">
@@ -3149,6 +3159,10 @@ function renderReportProjectMetrics() {
           <label class="metric-note-field">
             <span>计算口径</span>
             <textarea data-metric-field="observation" data-metric-id="${metric.id}" placeholder="例如：已完成数量 / 计划总数">${escapeHtml(metric.observation)}</textarea>
+          </label>
+          <label>
+            <span>可观测时间</span>
+            <input value="${escapeHtml(metric.observable || "")}" data-metric-field="observable" data-metric-id="${metric.id}" placeholder="例如：2026/6/30" />
           </label>
           <div class="metric-row-actions">
             <button class="secondary-action compact-action" type="button" data-record-metric="${metric.id}">记录本期</button>
@@ -4279,6 +4293,7 @@ document.addEventListener("click", async (event) => {
       current: "",
       target: "",
       observation: "",
+      observable: "",
     });
     state.metricEditMode = true;
     renderReportProjectMetrics();
@@ -4775,7 +4790,13 @@ memberReportForm.addEventListener("submit", async (event) => {
     applyProjectReportState(payload?.projectState);
     submissions = [savedReport || report, ...submissions.filter((item) => item.id !== savedReport?.id)].slice(0, 100);
     await loadWeeklyReports();
-    state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，已同步到服务端`;
+    const notification = payload?.notification;
+    const noticeSuffix = notification?.sent
+      ? "，已通知项目群"
+      : notification && notification.skipped === false
+        ? "，但群通知发送失败，请稍后重试"
+        : "";
+    state.saveNotice = `已保存 ${reportProject.shortName} 第${report.week}周更新，已同步到服务端${noticeSuffix}`;
     event.currentTarget.reset();
     event.currentTarget.elements.progress.value = "";
     event.currentTarget.elements.risk.value = "";

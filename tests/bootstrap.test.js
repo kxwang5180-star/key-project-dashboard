@@ -60,10 +60,11 @@ test("buildBootstrapProjectPayload exposes frontend-ready project state", () => 
     name: "覆盖率",
     current: "65%",
     target: "100%",
-      observation: "周一查看",
-      chartType: "percent",
-      history: [],
-    });
+    observation: "周一查看",
+    observable: "",
+    chartType: "percent",
+    history: [],
+  });
   assert.equal(payload.projectState.milestones[0].dateKey, "2026-06-18");
   assert.equal(payload.projectState.milestones[0].status, "in-progress");
   assert.equal(payload.projectState.risks[0].status, "open");

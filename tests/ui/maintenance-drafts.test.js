@@ -24,6 +24,17 @@ test("updateMetricDraftField updates the edited metric immediately", () => {
   );
 });
 
+test("updateMetricDraftField supports observable time edits", () => {
+  assert.deepEqual(
+    updateMetricDraftField([{ id: "m1", observable: "" }], {
+      metricId: "m1",
+      field: "observable",
+      value: "2026/6/30",
+    }),
+    [{ id: "m1", observable: "2026/6/30" }]
+  );
+});
+
 test("updateMilestoneDraftField keeps raw title in sync", () => {
   assert.deepEqual(
     updateMilestoneDraftField([{ id: "ms1", title: "旧节点", raw: "旧节点" }], {

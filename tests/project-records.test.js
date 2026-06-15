@@ -120,7 +120,7 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
           name: "预算执行",
           currentValue: "80%",
           targetValue: "95%",
-          observation: "按月复盘",
+          observation: "按月复盘；可观测：每月最后一天",
           chartType: "ring",
           records: [
             {
@@ -151,6 +151,7 @@ test("toPublicProjectMaintenanceState maps persisted metrics and milestones to f
           current: "80%",
           target: "95%",
           observation: "按月复盘",
+          observable: "每月最后一天",
           chartType: "ring",
           history: [{ date: "2026-06-01", value: "70%" }],
         },
@@ -182,6 +183,22 @@ test("buildProjectMetricCreateData accepts calculation aliases for metric formul
       { projectId: "project_1", index: 0 }
     ).observation,
     "已完成数量 / 计划总数"
+  );
+});
+
+test("buildProjectMetricCreateData combines observable time into persisted observation", () => {
+  assert.equal(
+    buildProjectMetricCreateData(
+      {
+        name: "人均管理门店数",
+        current: "",
+        target: "10家/人",
+        observation: "门店数÷中台文员人数",
+        observable: "2026/6/30",
+      },
+      { projectId: "project_1", index: 0 }
+    ).observation,
+    "门店数÷中台文员人数；可观测：2026/6/30"
   );
 });
 

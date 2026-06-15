@@ -18,6 +18,7 @@ import {
   toPublicProjectReportState,
   toPublicWeeklyReport,
 } from "../services/report-records.js";
+import { sendWeeklyReportProgressNotification } from "../services/weekly-report-notifications.js";
 
 export const reportRouter = Router();
 
@@ -92,7 +93,15 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
     return res.status(400).json({ message: "项目、周次、进展必填" });
   }
 
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      name: true,
+      shortName: true,
+      feishuChatId: true,
+    },
+  });
   const access = resolveProjectMaintenanceAccess({
     project,
     canMaintain: project ? await canUserMaintainProject(req.user, projectId) : false,
@@ -208,8 +217,29 @@ reportRouter.post("/", asyncRoute(async (req, res) => {
     };
   });
 
+  let notification = { sent: false, skipped: true, reason: "未触发群通知" };
+  try {
+    notification = await sendWeeklyReportProgressNotification({
+      project,
+      report: result.report,
+      user: req.user,
+    });
+  } catch (error) {
+    notification = {
+      sent: false,
+      skipped: false,
+      reason: "飞书群通知发送失败",
+    };
+    console.warn("[weekly-report-notification] failed", {
+      projectId,
+      reportId: result.report?.id,
+      message: error.message,
+    });
+  }
+
   res.status(201).json({
     report: toPublicWeeklyReport(result.report),
     projectState: result.projectState ? toPublicProjectReportState(result.projectState) : null,
+    notification,
   });
 }));

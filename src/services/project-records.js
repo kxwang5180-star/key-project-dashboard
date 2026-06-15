@@ -1,3 +1,5 @@
+import { buildMetricObservation, splitMetricObservation } from "./metric-observation.js";
+
 export function toPublicProjectBrief(project) {
   return {
     id: project.id,
@@ -126,7 +128,10 @@ export function buildProjectMetricCreateData(metric, { projectId, index = 0 }) {
     .slice(-8);
 
   const metricId = String(metric?.id || "").trim();
-  const observation = String(metric?.observation || metric?.calculation || metric?.formula || "").trim();
+  const observation = buildMetricObservation({
+    observation: metric?.observation || metric?.calculation || metric?.formula || "",
+    observable: metric?.observable || metric?.observableTime || "",
+  });
   const data = {
     projectId,
     name: String(metric?.name || `指标 ${index + 1}`).trim(),
@@ -178,18 +183,22 @@ export function buildProjectMilestoneCreateData(milestone, { projectId, index = 
 export function toPublicProjectMaintenanceState(project) {
   return {
     projectId: project.id,
-    metrics: (project.metrics || []).map((metric) => ({
-      id: metric.id,
-      name: metric.name,
-      current: metric.currentValue || "",
-      target: metric.targetValue || "",
-      observation: metric.observation || "",
-      chartType: metric.chartType || "",
-      history: (metric.records || []).map((record) => ({
-        date: formatDateKey(record.recordDate),
-        value: record.value || "",
-      })),
-    })),
+    metrics: (project.metrics || []).map((metric) => {
+      const observation = splitMetricObservation(metric.observation || "");
+      return {
+        id: metric.id,
+        name: metric.name,
+        current: metric.currentValue || "",
+        target: metric.targetValue || "",
+        observation: observation.observation,
+        observable: observation.observable,
+        chartType: metric.chartType || "",
+        history: (metric.records || []).map((record) => ({
+          date: formatDateKey(record.recordDate),
+          value: record.value || "",
+        })),
+      };
+    }),
     milestones: (project.milestones || []).map((milestone) => ({
       id: milestone.id,
       title: milestone.title,
