@@ -227,6 +227,8 @@ export async function sendWeeklyReportProgressNotification({
     sent: true,
     skipped: false,
     receiveId,
+    messageType: "interactive",
+    cardTemplate: "green",
     messageId: result.message_id || result.open_message_id || result.message?.message_id || "",
   };
 }

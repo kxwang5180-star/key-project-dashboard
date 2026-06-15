@@ -42,3 +42,66 @@ test("sendWeeklyReportProgressNotification skips projects without Feishu chat bi
 
   assert.deepEqual(result, { sent: false, skipped: true, reason: "项目未绑定飞书群聊" });
 });
+
+test("sendWeeklyReportProgressNotification sends an interactive Feishu card request", async () => {
+  const originalFetch = global.fetch;
+  const originalEnv = {
+    JWT_SECRET: process.env.JWT_SECRET,
+    DATABASE_URL: process.env.DATABASE_URL,
+    FEISHU_APP_ID: process.env.FEISHU_APP_ID,
+    FEISHU_APP_SECRET: process.env.FEISHU_APP_SECRET,
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
+  };
+  process.env.JWT_SECRET = process.env.JWT_SECRET || "test_secret";
+  process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./test.db";
+  process.env.FEISHU_APP_ID = "cli_test";
+  process.env.FEISHU_APP_SECRET = "secret_test";
+  process.env.PUBLIC_BASE_URL = "https://example.com/#report";
+  const { config } = await import("../src/config.js");
+  const originalFeishu = { ...config.feishu };
+  const calls = [];
+  config.feishu.appId = "cli_test";
+  config.feishu.appSecret = "secret_test";
+  config.feishu.publicBaseUrl = "https://example.com/#report";
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return new Response(JSON.stringify({
+      code: 0,
+      data: {
+        message_id: "om_test",
+      },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const result = await sendWeeklyReportProgressNotification({
+      project: { id: "project_10", shortName: "IPAD自助结账", feishuChatId: "oc_test" },
+      report: {
+        weekNumber: 10,
+        progress: "本周完成联调",
+        riskSummary: "暂无",
+      },
+      user: { name: "王康旭" },
+      tenantAccessToken: "tenant_token_test",
+    });
+    const body = JSON.parse(calls[0].options.body);
+    const card = JSON.parse(body.content);
+
+    assert.equal(body.receive_id, "oc_test");
+    assert.equal(body.msg_type, "interactive");
+    assert.equal(card.schema, "2.0");
+    assert.equal(card.header.template, "green");
+    assert.equal(result.messageType, "interactive");
+    assert.equal(result.cardTemplate, "green");
+  } finally {
+    global.fetch = originalFetch;
+    Object.assign(config.feishu, originalFeishu);
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
