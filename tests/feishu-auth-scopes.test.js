@@ -33,3 +33,33 @@ test("buildFeishuAuthorizeUrl requests only login identity scopes by default", a
     }
   }
 });
+
+test("selectFeishuLoginScopes strips chat and message scopes from legacy env values", async () => {
+  const { selectFeishuLoginScopes } = await import(`../src/lib/feishu.js?scope-filter-test=${Date.now()}`);
+  const scopes = selectFeishuLoginScopes([
+    "contact:user.base:readonly",
+    "auth:user.id:read",
+    "im:chat:read",
+    "im:chat.members:read",
+    "im:message",
+  ]);
+
+  assert.deepEqual(scopes, ["contact:user.base:readonly", "auth:user.id:read"]);
+});
+
+test("buildFeishuAuthorizeUrl filters legacy scopes unless extended scopes are explicitly allowed", async () => {
+  const { buildFeishuAuthorizeUrl } = await import(`../src/lib/feishu.js?scope-url-filter-test=${Date.now()}`);
+  const legacyScopes = [
+    "contact:user.base:readonly",
+    "auth:user.id:read",
+    "im:chat:read",
+    "im:chat.members:read",
+    "im:message",
+  ];
+
+  const loginUrl = new URL(buildFeishuAuthorizeUrl("state_test", legacyScopes));
+  assert.deepEqual(loginUrl.searchParams.get("scope").split(" "), ["contact:user.base:readonly", "auth:user.id:read"]);
+
+  const chatSyncUrl = new URL(buildFeishuAuthorizeUrl("state_test", legacyScopes, { allowExtendedScopes: true }));
+  assert.deepEqual(chatSyncUrl.searchParams.get("scope").split(" "), legacyScopes);
+});

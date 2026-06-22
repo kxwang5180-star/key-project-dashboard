@@ -127,7 +127,11 @@ authRouter.get("/feishu/chat-sync/login", authenticate, requireRoles("ADMIN"), a
     },
     "10m"
   );
-  const authorizeUrl = buildFeishuAuthorizeUrl(state, [...new Set([...config.feishu.scopes, ...config.feishu.chatSyncScopes])]);
+  const authorizeUrl = buildFeishuAuthorizeUrl(
+    state,
+    [...new Set([...config.feishu.scopes, ...config.feishu.chatSyncScopes])],
+    { allowExtendedScopes: true }
+  );
   res.redirect(authorizeUrl);
 }));
 

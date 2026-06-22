@@ -17,11 +17,26 @@ function formatFeishuError(data, fallbackMessage) {
   return code ? `${message}（飞书错误码：${code}）` : message;
 }
 
-export function buildFeishuAuthorizeUrl(stateValue, scopes = config.feishu.scopes) {
+export const FEISHU_LOGIN_SCOPES = [
+  "contact:user.base:readonly",
+  "auth:user.id:read",
+];
+
+export function selectFeishuLoginScopes(scopes = config.feishu.scopes) {
+  const requestedScopes = new Set(
+    (Array.isArray(scopes) ? scopes : String(scopes || "").split(/[\s,]+/))
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+  );
+  return FEISHU_LOGIN_SCOPES.filter((scope) => requestedScopes.size === 0 || requestedScopes.has(scope));
+}
+
+export function buildFeishuAuthorizeUrl(stateValue, scopes = config.feishu.scopes, options = {}) {
+  const requestedScopes = options.allowExtendedScopes ? scopes : selectFeishuLoginScopes(scopes);
   const url = new URL(config.feishu.authorizeUrl);
   url.searchParams.set("client_id", config.feishu.appId);
   url.searchParams.set("redirect_uri", config.feishu.redirectUri);
-  url.searchParams.set("scope", scopes.join(" "));
+  url.searchParams.set("scope", requestedScopes.join(" "));
   url.searchParams.set("state", stateValue);
   return url.toString();
 }
