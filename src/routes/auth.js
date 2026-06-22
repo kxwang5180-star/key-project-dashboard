@@ -113,6 +113,24 @@ authRouter.get("/feishu/login", asyncRoute(async (req, res) => {
   res.redirect(authorizeUrl);
 }));
 
+authRouter.get("/feishu/chat-sync/login", authenticate, requireRoles("ADMIN"), asyncRoute(async (req, res) => {
+  if (!ensureFeishuEnabled(res)) return;
+  if (!canManageIdentity(req.user)) {
+    return res.status(403).send("只有身份管理员可以授权同步飞书群聊");
+  }
+  const redirectPath = getSafeRedirectPath(req.query.redirect || "/?feishuChatSync=1#register");
+  const state = signScopedToken(
+    {
+      purpose: "feishu_chat_sync_oauth_state",
+      redirectPath,
+      userId: req.user.id,
+    },
+    "10m"
+  );
+  const authorizeUrl = buildFeishuAuthorizeUrl(state, [...new Set([...config.feishu.scopes, ...config.feishu.chatSyncScopes])]);
+  res.redirect(authorizeUrl);
+}));
+
 authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
   if (!ensureFeishuEnabled(res)) return;
 
@@ -125,10 +143,14 @@ authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
   }
 
   let redirectPath = config.feishu.postLoginRedirect;
+  let oauthPurpose = "feishu_oauth_state";
+  let chatSyncUserId = "";
   try {
     const payload = verifyToken(String(state));
-    if (payload?.purpose !== "feishu_oauth_state") throw new Error("Invalid state");
+    if (!["feishu_oauth_state", "feishu_chat_sync_oauth_state"].includes(payload?.purpose)) throw new Error("Invalid state");
+    oauthPurpose = payload.purpose;
     redirectPath = getSafeRedirectPath(payload.redirectPath);
+    chatSyncUserId = String(payload.userId || "");
   } catch (error) {
     console.warn("[feishu-auth] invalid oauth state", {
       message: error.message,
@@ -142,6 +164,27 @@ authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
     const tokenData = await exchangeFeishuCode(String(code));
     const userInfo = await fetchFeishuUserInfo(tokenData.access_token);
     assertFeishuUserAllowed(userInfo);
+
+    if (oauthPurpose === "feishu_chat_sync_oauth_state") {
+      const targetUser = await prisma.user.findUnique({ where: { id: chatSyncUserId } });
+      if (!targetUser) throw new Error("群聊同步授权用户不存在，请重新登录");
+      const sameIdentity =
+        (userInfo.union_id && userInfo.union_id === targetUser.feishuUnionId) ||
+        (userInfo.open_id && userInfo.open_id === targetUser.feishuOpenId) ||
+        (userInfo.user_id && userInfo.user_id === targetUser.feishuUserId);
+      if (!sameIdentity) throw new Error("群聊同步授权账号与当前登录账号不一致");
+      await prisma.user.update({
+        where: { id: targetUser.id },
+        data: {
+          feishuOpenId: userInfo.open_id || targetUser.feishuOpenId,
+          feishuUnionId: userInfo.union_id || targetUser.feishuUnionId,
+          feishuUserId: userInfo.user_id || targetUser.feishuUserId,
+          avatarUrl: userInfo.avatar_url || targetUser.avatarUrl,
+          ...buildFeishuTokenData(tokenData),
+        },
+      });
+      return res.redirect(302, redirectPath);
+    }
 
     const email = getUserEmailOrFallback(userInfo);
     const mappedRole = mapRoleFromFeishuUser(userInfo);
@@ -188,6 +231,7 @@ authRouter.get("/feishu/callback", asyncRoute(async (req, res) => {
       message: error.message,
       redirectUri: config.feishu.redirectUri,
       scopes: config.feishu.scopes,
+      chatSyncScopes: config.feishu.chatSyncScopes,
       hasCode: Boolean(code),
       hasState: Boolean(state),
     });
@@ -249,9 +293,10 @@ authRouter.post("/feishu/my-chats/sync", authenticate, requireRoles("ADMIN"), as
       message: error.message,
       userId: req.user.id,
       scopes: config.feishu.scopes,
+      chatSyncScopes: config.feishu.chatSyncScopes,
     });
     res.status(502).json({
-      message: `飞书群聊同步失败：${error.message}。请确认应用已开启机器人能力，FEISHU_SCOPES 包含 im:chat:read 和 im:chat.members:read，并重新飞书登录授权。`,
+      message: `飞书群聊同步失败：${error.message}。请确认应用已开启机器人能力，FEISHU_CHAT_SYNC_SCOPES 包含 im:chat:read 和 im:chat.members:read，并通过群聊同步入口重新授权。`,
     });
   }
 }));

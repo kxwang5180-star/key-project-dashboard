@@ -579,6 +579,87 @@ async function syncMyFeishuChats() {
   });
 }
 
+function buildFeishuChatSyncRedirectPath(params = {}) {
+  const url = new URL(window.location.href);
+  Object.entries({ feishuChatSync: "1", ...params }).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") url.searchParams.delete(key);
+    else url.searchParams.set(key, String(value));
+  });
+  if (!url.hash) url.hash = "register";
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function startFeishuChatSyncAuthorization(params = {}) {
+  const redirect = encodeURIComponent(buildFeishuChatSyncRedirectPath(params));
+  window.location.href = `/api/auth/feishu/chat-sync/login?redirect=${redirect}`;
+}
+
+async function runAuthorizedFeishuChatSync() {
+  authState.chatSyncErrors = [];
+  authState.chatSyncing = true;
+  renderAuthCenter();
+  try {
+    const payload = await syncMyFeishuChats();
+    if (!payload) {
+      authState.bindingError = "群聊同步失败，请检查飞书授权和网络状态。";
+      return;
+    }
+    const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
+    const memberTip = payload.membersSynced
+      ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
+      : "，选择项目群聊后再同步该群成员";
+    authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊${memberTip}。`;
+    authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
+    await loadFeishuChats();
+    await loadRoleBindings();
+  } catch (error) {
+    authState.bindingError = error.message;
+  } finally {
+    authState.chatSyncing = false;
+    renderAuthCenter();
+  }
+}
+
+async function consumeFeishuChatSyncReturn() {
+  const url = new URL(window.location.href);
+  const syncMode = url.searchParams.get("feishuChatSync");
+  if (!syncMode) return;
+  const projectId = url.searchParams.get("syncProjectId") || "";
+  const chatId = url.searchParams.get("syncChatId") || "";
+  url.searchParams.delete("feishuChatSync");
+  url.searchParams.delete("syncProjectId");
+  url.searchParams.delete("syncChatId");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash || ""}`);
+  if (syncMode === "project" && projectId) {
+    await runAuthorizedProjectChatMembersSync(projectId, chatId);
+    return;
+  }
+  await runAuthorizedFeishuChatSync();
+}
+
+async function runAuthorizedProjectChatMembersSync(projectId, chatId) {
+  const actionKey = buildActionKey("sync-project-chat", projectId);
+  beginAction(actionKey);
+  renderAuthCenter();
+  try {
+    const payload = await syncProjectChatMembers(projectId, chatId);
+    if (!payload) {
+      authState.bindingError = "群成员同步失败，请重试。";
+      return;
+    }
+    const project = projects.find((item) => item.id === projectId);
+    if (project) project.feishuChatId = payload.chatId || chatId;
+    authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
+    authState.bindingError = formatProjectMemberSyncMessage(payload);
+    await loadRoleBindings();
+  } catch (error) {
+    authState.bindingError = error.message;
+  } finally {
+    finishAction(actionKey);
+    renderAuthCenter();
+  }
+}
+
 async function loadFeishuChats() {
   const payload = await apiRequest("/api/auth/feishu/chats");
   authState.chats = payload.chats || [];
@@ -2511,11 +2592,9 @@ function renderAuthCenter() {
           <div class="auth-copy">
             <span class="login-status-dot">飞书统一身份</span>
             <strong>${escapeHtml(authModel.title)}</strong>
-            <p>${escapeHtml(authModel.subtitle)}</p>
           </div>
           <button class="primary-action feishu-login-button" type="button" data-feishu-login>${escapeHtml(authModel.actions[0].label)}</button>
         </div>
-        ${authState.error ? `<div class="save-notice">${escapeHtml(authState.error)}</div>` : ""}
       </div>
     `;
     roleBindingWrapper.classList.add("is-hidden");
@@ -4016,24 +4095,7 @@ document.addEventListener("click", async (event) => {
   if (refreshChatListButton) {
     authState.chatsRefreshing = true;
     renderChatPickerModal();
-    syncMyFeishuChats()
-      .then((payload) => {
-        if (!payload) { authState.bindingError = "群聊列表刷新失败，请检查服务状态。"; return; }
-        const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败` : "";
-        const memberTip = payload.membersSynced
-          ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
-          : "，选择项目群聊后再同步该群成员";
-        authState.bindingError = `群聊列表已刷新：${payload.chatCount || 0} 个群聊${memberTip}。`;
-        authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
-        return loadFeishuChats();
-      })
-      .catch((error) => {
-        authState.bindingError = error.message;
-      })
-      .finally(() => {
-        authState.chatsRefreshing = false;
-        render();
-      });
+    startFeishuChatSyncAuthorization();
     return;
   }
 
@@ -4070,27 +4132,7 @@ document.addEventListener("click", async (event) => {
     authState.chatSyncErrors = [];
     authState.chatSyncing = true;
     renderAuthCenter();
-    syncMyFeishuChats()
-      .then((payload) => {
-        if (!payload) { authState.bindingError = "群聊同步失败，请检查飞书授权和网络状态。"; return; }
-        const errorTip = payload.errorCount ? `，${payload.errorCount} 个群聊成员读取失败，可先绑定群聊后再排查权限` : "";
-        const memberTip = payload.membersSynced
-          ? `、${payload.memberCount || 0} 条成员记录${errorTip}`
-          : "，选择项目群聊后再同步该群成员";
-        authState.bindingError = `已写入 ${payload.chatCount || 0} 个群聊${memberTip}。`;
-        authState.chatSyncErrors = Array.isArray(payload.errors) ? payload.errors : [];
-        return loadFeishuChats();
-      })
-      .then(() => loadRoleBindings())
-      .then(() => {
-        authState.chatSyncing = false;
-        renderAuthCenter();
-      })
-      .catch((error) => {
-        authState.bindingError = error.message;
-        authState.chatSyncing = false;
-        renderAuthCenter();
-      });
+    startFeishuChatSyncAuthorization();
     return;
   }
 
@@ -4101,24 +4143,11 @@ document.addEventListener("click", async (event) => {
     if (!beginAction(actionKey)) return;
     const chatId = document.querySelector(`[data-project-chat-id="${projectId}"]`)?.value || "";
     renderAuthCenter();
-    syncProjectChatMembers(projectId, chatId)
-      .then((payload) => {
-        if (!payload) { authState.bindingError = "群成员同步失败，请重试。"; return; }
-        const project = projects.find((item) => item.id === projectId);
-        if (project) project.feishuChatId = payload.chatId || chatId;
-        authState.chats = mergeChatMembers(authState.chats, payload.chatId || chatId, payload.members || []);
-        authState.bindingError = formatProjectMemberSyncMessage(payload);
-        return loadRoleBindings();
-      })
-      .then(() => renderAuthCenter())
-      .catch((error) => {
-        authState.bindingError = error.message;
-        renderAuthCenter();
-      })
-      .finally(() => {
-        finishAction(actionKey);
-        renderAuthCenter();
-      });
+    startFeishuChatSyncAuthorization({
+      feishuChatSync: "project",
+      syncProjectId: projectId,
+      syncChatId: chatId,
+    });
     return;
   }
 
@@ -4823,6 +4852,7 @@ document.addEventListener("keydown", (event) => {
 async function bootstrapApplication() {
   render();
   await loadCurrentUser();
+  await consumeFeishuChatSyncReturn();
   render();
 }
 

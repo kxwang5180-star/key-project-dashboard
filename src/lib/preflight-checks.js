@@ -22,6 +22,9 @@ export const DEFAULT_API_PATHS = [
 export const REQUIRED_FEISHU_SCOPES = [
   "contact:user.base:readonly",
   "auth:user.id:read",
+];
+
+export const REQUIRED_FEISHU_CHAT_SYNC_SCOPES = [
   "im:chat:read",
   "im:chat.members:read",
 ];
@@ -96,13 +99,30 @@ export function checkFeishuScopes(value, requiredScopes = REQUIRED_FEISHU_SCOPES
     scopes,
     message: missing.length
       ? `缺少飞书权限：${missing.join(", ")}`
-      : "飞书登录和群聊同步权限已覆盖",
+      : "飞书登录权限已覆盖",
+  };
+}
+
+export function checkFeishuChatSyncScopes(value, requiredScopes = REQUIRED_FEISHU_CHAT_SYNC_SCOPES) {
+  const scopes = String(value || "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const missing = requiredScopes.filter((scope) => !scopes.includes(scope));
+  return {
+    name: "feishu-chat-sync-scopes",
+    ok: missing.length === 0,
+    missing,
+    scopes,
+    message: missing.length
+      ? `缺少飞书权限：${missing.join(", ")}`
+      : "飞书群聊同步权限已覆盖",
   };
 }
 
 export function checkFeishuReminderScopes(env = {}) {
   const enabled = String(env.FEISHU_MILESTONE_REMINDERS_ENABLED || "false").trim().toLowerCase() === "true";
-  const scopes = String(env.FEISHU_SCOPES || "")
+  const scopes = `${env.FEISHU_MESSAGE_SCOPES || ""} ${env.FEISHU_SCOPES || ""}`
     .split(/[\s,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -117,7 +137,7 @@ export function checkFeishuReminderScopes(env = {}) {
       ? enabled
         ? "里程碑群提醒发送权限已覆盖"
         : "里程碑群提醒未启用，已跳过消息发送权限检查"
-      : `启用里程碑群提醒时，FEISHU_SCOPES 需包含以下任一权限：${FEISHU_MESSAGE_SEND_SCOPES.join(", ")}`,
+      : `启用里程碑群提醒时，FEISHU_MESSAGE_SCOPES 需包含以下任一权限：${FEISHU_MESSAGE_SEND_SCOPES.join(", ")}`,
   };
 }
 

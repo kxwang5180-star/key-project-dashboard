@@ -7,6 +7,7 @@ import {
   checkFeishuRedirectUri,
   checkFeishuReminderScopes,
   checkFeishuScopes,
+  checkFeishuChatSyncScopes,
   checkFeishuAccessPolicy,
   checkDependencyLockfile,
   checkRuntimeDependencies,
@@ -56,8 +57,15 @@ test("checkFeishuRedirectUri requires the OAuth callback path", () => {
   assert.match(check.message, /\/api\/auth\/feishu\/callback/);
 });
 
-test("checkFeishuScopes requires login and chat sync permissions", () => {
-  const check = checkFeishuScopes("contact:user.base:readonly auth:user.id:read im:chat:read");
+test("checkFeishuScopes only requires login identity permissions", () => {
+  const check = checkFeishuScopes("contact:user.base:readonly auth:user.id:read");
+  assert.equal(check.ok, true);
+  assert.deepEqual(check.missing, []);
+  assert.match(check.message, /飞书登录权限/);
+});
+
+test("checkFeishuChatSyncScopes separately requires chat permissions", () => {
+  const check = checkFeishuChatSyncScopes("contact:user.base:readonly auth:user.id:read im:chat:read");
   assert.equal(check.ok, false);
   assert.deepEqual(check.missing, ["im:chat.members:read"]);
   assert.match(check.message, /缺少飞书权限/);
@@ -74,16 +82,17 @@ test("checkFeishuReminderScopes only requires message permission when reminders 
   assert.equal(
     checkFeishuReminderScopes({
       FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
-      FEISHU_SCOPES: "contact:user.base:readonly im:message:send_as_bot",
+      FEISHU_SCOPES: "contact:user.base:readonly auth:user.id:read",
+      FEISHU_MESSAGE_SCOPES: "im:message:send_as_bot",
     }).ok,
     true
   );
   const check = checkFeishuReminderScopes({
     FEISHU_MILESTONE_REMINDERS_ENABLED: "true",
-    FEISHU_SCOPES: "contact:user.base:readonly",
+    FEISHU_SCOPES: "contact:user.base:readonly auth:user.id:read",
   });
   assert.equal(check.ok, false);
-  assert.match(check.message, /im:message/);
+  assert.match(check.message, /FEISHU_MESSAGE_SCOPES/);
 });
 
 test("checkFeishuCallbackConfig requires callback settings only when reminders are enabled", () => {

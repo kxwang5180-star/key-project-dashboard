@@ -44,7 +44,11 @@ export const config = {
     callbackVerificationToken: process.env.FEISHU_CALLBACK_VERIFICATION_TOKEN || "",
     postLoginRedirect: process.env.FEISHU_POST_LOGIN_REDIRECT || "/",
     allowAllUsers: String(process.env.FEISHU_ALLOW_ALL_USERS || "true").toLowerCase() === "true",
-    scopes: String(process.env.FEISHU_SCOPES || "contact:user.base:readonly auth:user.id:read im:chat:read im:chat.members:read")
+    scopes: String(process.env.FEISHU_SCOPES || "contact:user.base:readonly auth:user.id:read")
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    chatSyncScopes: String(process.env.FEISHU_CHAT_SYNC_SCOPES || "im:chat:read im:chat.members:read")
       .split(/[\s,]+/)
       .map((item) => item.trim())
       .filter(Boolean),
